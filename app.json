@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "Genestac",
+    "slug": "genestac-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B6B54"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.genestac.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#0B6B54"
+      },
+      "package": "com.genestac.mobile"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "scheme": "genestac",
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ]
+  }
+}

@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
-import { WeightJourney, MealLog, SleepLog } from './types';
+import { WeightJourney, MealLog, SleepLog, Referral, RewardTransaction, ReferralSummary } from './types';
+
 
 export type RecipeRecommendation = {
   name: string;
@@ -392,4 +393,151 @@ export async function uploadToCloudinary(imageUri: string): Promise<string> {
     throw err;
   }
 }
+
+// 8. Refer & Earn API Helpers
+
+/**
+ * Validate a referral code against existing users
+ */
+export async function validateReferralCode(code: string): Promise<{ valid: boolean; referrerId?: string; referrerName?: string }> {
+  if (!code || !code.trim()) {
+    return { valid: false };
+  }
+
+  try {
+    const cleanCode = code.trim().toUpperCase();
+    const { data, error } = await supabase
+      .from('users')
+      .select('id, name, referral_code')
+      .eq('referral_code', cleanCode)
+      .maybeSingle();
+
+    if (error || !data) {
+      return { valid: false };
+    }
+
+    return {
+      valid: true,
+      referrerId: data.id,
+      referrerName: data.name,
+    };
+  } catch (err) {
+    console.error('Error validating referral code:', err);
+    return { valid: false };
+  }
+}
+
+/**
+ * Link a referee user to a referrer code and create a PENDING referral record
+ */
+export async function linkReferralOnSignup(refereeUserId: string, referralCode: string): Promise<boolean> {
+  try {
+    const { valid, referrerId } = await validateReferralCode(referralCode);
+    if (!valid || !referrerId) {
+      console.warn('Invalid referral code provided on signup:', referralCode);
+      return false;
+    }
+
+    const cleanCode = referralCode.trim().toUpperCase();
+
+    // 1. Update referee's record in users table
+    const { error: userUpdateErr } = await supabase
+      .from('users')
+      .update({
+        referred_by_code: cleanCode,
+        referred_by_user_id: referrerId,
+      })
+      .eq('id', refereeUserId);
+
+    if (userUpdateErr) {
+      console.error('Error updating referred_by fields on user:', userUpdateErr);
+    }
+
+    // 2. Insert into referrals table
+    const { error: referralErr } = await supabase
+      .from('referrals')
+      .insert({
+        referrer_id: referrerId,
+        referee_id: refereeUserId,
+        referral_code_used: cleanCode,
+        status: 'PENDING',
+        qualifying_event: 'PLAN_PURCHASED',
+      });
+
+    if (referralErr) {
+      console.error('Error creating referral record:', referralErr);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Failed to link referral on signup:', err);
+    return false;
+  }
+}
+
+/**
+ * Fetch comprehensive referral summary for a user
+ */
+export async function fetchUserReferralSummary(userId: string): Promise<ReferralSummary | null> {
+  try {
+    // 1. Fetch user's referral fields
+    const { data: userData, error: userErr } = await supabase
+      .from('users')
+      .select('referral_code, wallet_balance, total_earned, total_referrals_count')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (userErr) {
+      console.error('Error fetching user referral profile:', userErr);
+    }
+
+    // 2. Fetch referrals where this user is the referrer
+    const { data: referralsData, error: referralsErr } = await supabase
+      .from('referrals')
+      .select('*, referee:users!referrals_referee_id_fkey(name)')
+      .eq('referrer_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (referralsErr) {
+      console.error('Error fetching user referrals list:', referralsErr);
+    }
+
+    // 3. Fetch ledger transactions for this user
+    const { data: txData, error: txErr } = await supabase
+      .from('reward_transactions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (txErr) {
+      console.error('Error fetching reward transactions:', txErr);
+    }
+
+    const referralsList: Referral[] = (referralsData || []).map((r: any) => ({
+      ...r,
+      referee_name: r.referee?.name || 'New Patient',
+    }));
+
+    const transactionsList: RewardTransaction[] = txData || [];
+
+    const pendingCount = referralsList.filter(r => r.status === 'PENDING').length;
+    const qualifiedCount = referralsList.filter(r => r.status === 'QUALIFIED' || r.status === 'REWARDED').length;
+
+    return {
+      referralCode: userData?.referral_code || '',
+      walletBalance: Number(userData?.wallet_balance || 0),
+      totalEarned: Number(userData?.total_earned || 0),
+      totalReferralsCount: userData?.total_referrals_count ?? referralsList.length,
+      pendingCount,
+      qualifiedCount,
+      referralsList,
+      transactionsList,
+    };
+  } catch (err) {
+    console.error('Failed to fetch referral summary:', err);
+    return null;
+  }
+}
+
 

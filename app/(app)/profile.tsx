@@ -183,6 +183,30 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* Rewards & Referrals */}
+        <View style={s.sectionCard}>
+          <Text style={s.sectionTitle}>Rewards & Referrals</Text>
+          <TouchableOpacity
+            style={s.fieldRow}
+            onPress={() => router.push('/(app)/referral')}
+          >
+            <Ionicons
+              name="gift-outline"
+              size={18}
+              color={Colors.primaryLight}
+            />
+            <View style={s.fieldInfo}>
+              <Text style={s.fieldLabel}>Refer & Earn Rewards</Text>
+              <Text style={s.fieldValue}>Share your code, view wallet balance & ledger</Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={16}
+              color={Colors.textLight}
+            />
+          </TouchableOpacity>
+        </View>
+
         {/* Security */}
         <View style={s.sectionCard}>
           <Text style={s.sectionTitle}>Security</Text>
@@ -206,6 +230,7 @@ export default function ProfileScreen() {
             />
           </TouchableOpacity>
         </View>
+
 
         {/* Sign Out */}
         <TouchableOpacity style={s.signOutBtn} onPress={handleSignOut}>

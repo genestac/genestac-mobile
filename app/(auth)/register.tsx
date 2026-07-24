@@ -19,6 +19,7 @@ import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Colors, Fonts, Spacing, Radius } from '@/constants/colors';
+import { linkReferralOnSignup, validateReferralCode } from '@/lib/api';
 
 export default function RegisterScreen() {
   const [name, setName] = useState('');
@@ -26,9 +27,11 @@ export default function RegisterScreen() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [referralCode, setReferralCode] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
 
   // OTP Modal state
   const [showOtp, setShowOtp] = useState(false);
@@ -96,14 +99,20 @@ export default function RegisterScreen() {
         status: 'NEW',
       });
 
-      setLoading(false);
-
       if (profileError) {
+        setLoading(false);
         Alert.alert('Error', profileError.message);
         return;
       }
 
-      // 3. Show OTP modal
+      // 3. Link referral code if provided
+      if (referralCode.trim()) {
+        await linkReferralOnSignup(authUserId, referralCode.trim());
+      }
+
+      setLoading(false);
+
+      // 4. Show OTP modal
       setOtpUserId(authUserId);
       setOtpEmail(email.trim().toLowerCase());
       setOtpPassword(password);
@@ -113,6 +122,7 @@ export default function RegisterScreen() {
       Alert.alert('Error', e.message || 'Something went wrong.');
     }
   };
+
 
   const handleVerifyOtp = async () => {
     if (!otp || otp.length < 4) {
@@ -222,6 +232,16 @@ export default function RegisterScreen() {
                 leftIcon="shield-checkmark-outline"
                 error={errors.confirmPassword}
               />
+
+              <Input
+                label="Referral Code (Optional)"
+                value={referralCode}
+                onChangeText={(t) => setReferralCode(t.toUpperCase())}
+                placeholder="e.g. GEN7K9"
+                autoCapitalize="characters"
+                leftIcon="gift-outline"
+              />
+
 
               {/* Terms checkbox */}
               <TouchableOpacity

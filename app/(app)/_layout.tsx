@@ -100,6 +100,14 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="referral"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="gift" focused={focused} label="Refer" />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           tabBarIcon: ({ focused }) => (
@@ -107,6 +115,7 @@ export default function AppLayout() {
           ),
         }}
       />
+      
     </Tabs>
   );
 }

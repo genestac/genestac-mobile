@@ -1,60 +1,55 @@
 import { useEffect, useRef } from 'react';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import * as Linking from 'expo-linking';
+import { useRouter } from 'expo-router';
+import { useURL } from 'expo-linking';
 import { supabase } from '@/lib/supabase';
 import { Colors } from '@/constants/colors';
 
 /**
  * OAuth deep-link callback screen.
  *
- * After Google (or any provider) redirects to  genestac://auth/callback?...
- * expo-router renders this file. We grab the full URL, extract the
- * access_token / refresh_token from the hash or query string, call
- * setSession, then push the user into the authenticated area.
+ * Supabase redirects to  genestac://auth/callback#access_token=...
+ * after the user completes Google sign-in.
+ *
+ * expo-linking's `useURL()` returns the URL whether the app was:
+ *  - cold-started from the deep link, OR
+ *  - already open and the link arrives while foregrounded.
  */
 export default function AuthCallback() {
   const router = useRouter();
+  const url = useURL();           // live, reactive — covers both cold + warm starts
   const handled = useRef(false);
 
   useEffect(() => {
-    // Guard against double-execution in StrictMode / fast-refresh
-    if (handled.current) return;
+    if (!url || handled.current) return;
     handled.current = true;
 
     const handleCallback = async () => {
       try {
-        // Grab the URL that opened this screen
-        const url = await Linking.getInitialURL();
-        if (!url) {
-          router.replace('/(auth)/login');
-          return;
-        }
-
-        // Tokens may arrive as a hash fragment or query string
+        // Tokens may arrive in the hash fragment OR as query params
         const parsed = new URL(url);
         const fragment = parsed.hash ? parsed.hash.substring(1) : '';
-        const query = parsed.search ? parsed.search.substring(1) : '';
-        const params = new URLSearchParams(fragment || query);
+        const query   = parsed.search ? parsed.search.substring(1) : '';
+        const params  = new URLSearchParams(fragment || query);
 
-        const accessToken = params.get('access_token');
+        const accessToken  = params.get('access_token');
         const refreshToken = params.get('refresh_token');
 
         if (accessToken && refreshToken) {
           const { data, error } = await supabase.auth.setSession({
-            access_token: accessToken,
+            access_token:  accessToken,
             refresh_token: refreshToken,
           });
 
           if (!error && data.session?.user) {
-            // Upsert user record (covers first-time Google sign-in)
             const u = data.session.user;
+            // Upsert user row — safe for both sign-in and account-linking
             await supabase.from('users').upsert(
               {
-                id: u.id,
-                name: u.user_metadata?.full_name ?? u.email?.split('@')[0] ?? '',
-                email: u.email ?? '',
-                phone: u.phone ?? '',
+                id:     u.id,
+                name:   u.user_metadata?.full_name ?? u.email?.split('@')[0] ?? '',
+                email:  u.email ?? '',
+                phone:  u.phone ?? '',
                 status: 'NEW',
                 source: 'google_oauth_mobile',
               },
@@ -65,7 +60,7 @@ export default function AuthCallback() {
           }
         }
 
-        // No tokens — fall back to login
+        // Could not extract tokens — return to login
         router.replace('/(auth)/login');
       } catch (err) {
         console.error('[AuthCallback] error:', err);
@@ -74,7 +69,7 @@ export default function AuthCallback() {
     };
 
     handleCallback();
-  }, []);
+  }, [url]);
 
   return (
     <View style={styles.container}>

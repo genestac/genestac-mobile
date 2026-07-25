@@ -29,12 +29,9 @@
       "intentFilters": [
         {
           "action": "VIEW",
-          "autoVerify": true,
           "data": [
             {
-              "scheme": "genestac",
-              "host": "auth",
-              "pathPrefix": "/callback"
+              "scheme": "genestac"
             }
           ],
           "category": ["BROWSABLE", "DEFAULT"]

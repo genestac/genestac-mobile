@@ -1,9 +1,7 @@
-import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Colors } from '@/constants/colors';
 
 export default function RootLayout() {
   return (
@@ -14,6 +12,8 @@ export default function RootLayout() {
           <Stack.Screen name="index" />
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(app)" />
+          {/* OAuth deep-link callback - genestac://auth/callback */}
+          <Stack.Screen name="auth/callback" />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>

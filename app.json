@@ -25,7 +25,21 @@
         "backgroundColor": "#FFFFFF"
       },
       "package": "com.genestac.mobile",
-      "permissions": ["ACTIVITY_RECOGNITION"]
+      "permissions": ["ACTIVITY_RECOGNITION"],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "genestac",
+              "host": "auth",
+              "pathPrefix": "/callback"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

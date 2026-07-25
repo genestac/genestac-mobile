@@ -8,20 +8,24 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0B6B54"
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.genestac.mobile"
+      "bundleIdentifier": "com.genestac.mobile",
+      "infoPlist": {
+        "NSMotionUsageDescription": "We use motion data to count your daily steps."
+      }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundColor": "#0B6B54"
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#FFFFFF"
       },
-      "package": "com.genestac.mobile"
+      "package": "com.genestac.mobile",
+      "permissions": ["ACTIVITY_RECOGNITION"]
     },
     "web": {
       "favicon": "./assets/favicon.png"

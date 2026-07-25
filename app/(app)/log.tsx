@@ -5,10 +5,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { Colors, Fonts, Spacing, Radius } from '@/constants/colors';
 import { analyzeMeal } from '@/lib/api';
 import { MealLog, WeightJourney } from '@/lib/types';
+
 
 const WATER_STEPS = [0.25, 0.5, 1.0];
 const HABITS = [
@@ -81,7 +83,8 @@ const groupMealsByDate = (meals?: MealLog[]) => {
 export default function LogScreen() {
   const [user, setUser] = useState<any>(null);
   const [journey, setJourney] = useState<WeightJourney>({ history: [] });
-  const [activeTab, setActiveTab] = useState<'meals' | 'water' | 'sleep' | 'measurements' | 'habits'>('meals');
+  const [activeTab, setActiveTab] = useState<'steps' | 'meals' | 'water' | 'sleep' | 'measurements' | 'habits'>('meals');
+
   const [loading, setLoading] = useState(true);
 
   // Meal Log
@@ -217,12 +220,14 @@ export default function LogScreen() {
   };
 
   const TABS = [
+    { key: 'steps', label: 'Steps', icon: 'walk-outline' },
     { key: 'meals', label: 'Meals', icon: 'restaurant-outline' },
     { key: 'water', label: 'Water', icon: 'water-outline' },
     { key: 'sleep', label: 'Sleep', icon: 'moon-outline' },
     { key: 'measurements', label: 'Measurements', icon: 'resize-outline' },
     { key: 'habits', label: 'Habits', icon: 'checkbox-outline' },
   ] as const;
+
 
   if (loading) return <SafeAreaView style={styles.center} edges={["top", "left", "right"]}><ActivityIndicator color={Colors.primaryLight} size="large" /></SafeAreaView>;
 
@@ -244,8 +249,25 @@ export default function LogScreen() {
       </ScrollView>
 
       <ScrollView style={styles.flex} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Steps */}
+        {activeTab === 'steps' && (
+          <View style={styles.section}>
+            <Text style={styles.sectionHead}>Pedometer & Step Calculator</Text>
+            <Text style={styles.subtitle}>
+              Track real-time steps, distance walked, active duration, and calories burned.
+            </Text>
+            <TouchableOpacity
+              style={styles.primaryBtn}
+              onPress={() => router.push('/(app)/steps')}
+            >
+              <Text style={styles.primaryBtnText}>Open Live Step Tracker</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Meals */}
         {activeTab === 'meals' && (
+
           <View style={styles.section}>
             <Text style={styles.sectionHead}>Log a Meal</Text>
             

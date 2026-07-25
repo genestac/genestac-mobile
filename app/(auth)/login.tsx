@@ -8,15 +8,15 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Colors, Fonts, Spacing, Radius } from '@/constants/colors';
+import { Colors, Spacing, Radius } from '@/constants/colors';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -64,10 +64,14 @@ export default function LoginScreen() {
         {/* Header Brand */}
         <View style={styles.brandSection}>
           <View style={styles.brandHeader}>
-            <View style={styles.logoCircle}>
-              <Ionicons name="leaf" size={26} color={Colors.white} />
+            <View>
+              <Image
+                source={require('@/assets/icon.png')}
+                style={styles.logoImage}
+                resizeMode="contain"
+              />
             </View>
-            <Text style={styles.brandName}>Genestac</Text>
+            {/* <Text style={styles.brandName}>Genestac</Text> */}
           </View>
           <Text style={styles.brandTagline}>Your weight loss journey starts here</Text>
         </View>
@@ -171,26 +175,24 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   logoCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: Colors.primaryLight,
+    width: 90,
+    height: 90,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: Colors.primaryLight,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+  },
+  logoImage: {
+    width: 90,
+    height: 90,
   },
   brandName: {
-    fontSize: Fonts.sizes.xxxl,
+    fontSize: 26,
     fontWeight: '800',
     color: Colors.textPrimary,
     letterSpacing: -0.5,
   },
   brandTagline: {
-    fontSize: Fonts.sizes.sm,
+    fontSize: 14,
     color: Colors.textMuted,
     marginTop: 4,
   },
@@ -207,14 +209,14 @@ const styles = StyleSheet.create({
     borderColor: Colors.borderLight,
   },
   title: {
-    fontSize: Fonts.sizes.xxl,
+    fontSize: 22,
     fontWeight: '800',
     color: Colors.textPrimary,
     marginBottom: 4,
     letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: Fonts.sizes.md,
+    fontSize: 14,
     color: Colors.textMuted,
     marginBottom: Spacing.lg,
   },
@@ -226,7 +228,7 @@ const styles = StyleSheet.create({
     marginTop: -4,
   },
   forgotText: {
-    fontSize: Fonts.sizes.sm,
+    fontSize: 13,
     fontWeight: '600',
     color: Colors.primaryLight,
   },
@@ -245,7 +247,7 @@ const styles = StyleSheet.create({
   },
   dividerText: {
     marginHorizontal: Spacing.md,
-    fontSize: Fonts.sizes.sm,
+    fontSize: 13,
     color: Colors.textMuted,
     fontWeight: '500',
   },
@@ -255,20 +257,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   registerText: {
-    fontSize: Fonts.sizes.md,
+    fontSize: 14,
     color: Colors.textSecondary,
   },
   registerLink: {
-    fontSize: Fonts.sizes.md,
+    fontSize: 14,
     fontWeight: '700',
     color: Colors.primaryLight,
   },
   footer: {
     textAlign: 'center',
-    fontSize: Fonts.sizes.xs,
+    fontSize: 12,
     color: Colors.textMuted,
     marginTop: Spacing.lg,
-    lineHeight: 18,
+    lineHeight: 16,
   },
   footerLink: {
     color: Colors.primaryLight,

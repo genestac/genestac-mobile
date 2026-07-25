@@ -38,6 +38,14 @@ export type HabitLog = {
   habits: Record<string, boolean>;
 };
 
+export type StepLog = {
+  date: string;
+  steps: number;
+  goal?: number;
+  distanceKm?: number;
+  caloriesBurned?: number;
+};
+
 export type WeightJourney = {
   targetGoal?: number;
   history: WeightLog[];
@@ -47,7 +55,10 @@ export type WeightJourney = {
   sleepLogs?: SleepLog[];
   measurements?: MeasurementLog[];
   habitLogs?: HabitLog[];
+  stepGoal?: number;
+  stepLogs?: StepLog[];
 };
+
 
 export type UserProfile = {
   id: string;

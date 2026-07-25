@@ -13,7 +13,7 @@ function TabIcon({ name, focused, label }: { name: any; focused: boolean; label:
     <View style={styles.tabItem}>
       <Ionicons
         name={focused ? name : `${name}-outline`}
-        size={22}
+        size={20}
         color={focused ? Colors.primaryLight : Colors.textMuted}
       />
       <Text
@@ -100,6 +100,14 @@ export default function AppLayout() {
         }}
       />
       <Tabs.Screen
+        name="steps"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="walk" focused={focused} label="Steps" />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="referral"
         options={{
           tabBarIcon: ({ focused }) => (
@@ -115,6 +123,7 @@ export default function AppLayout() {
           ),
         }}
       />
+
       
     </Tabs>
   );
@@ -142,7 +151,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   tabLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
     color: Colors.textMuted,
     marginTop: 1,

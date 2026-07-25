@@ -643,7 +643,29 @@ export default function DashboardScreen() {
             </View>
           </View>
 
+          {/* Daily Steps Card */}
+          <TouchableOpacity
+            style={styles.achievementsBox}
+            onPress={() => router.push('/(app)/steps')}
+            activeOpacity={0.9}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ width: 34, height: 34, borderRadius: 17, backgroundColor: '#ECFDF5', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="walk" size={18} color="#10B981" />
+                </View>
+                <View>
+                  <Text style={styles.achievementsTitle}>Daily Step Tracker & Pedometer</Text>
+                  <Text style={{ fontSize: 12, color: Colors.textMuted }}>Track live steps, distance, & calories</Text>
+                </View>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={Colors.textMuted} />
+            </View>
+          </TouchableOpacity>
+
+
           {/* Main Weight Loss Progress + Current Stats Grid */}
+
           <View
             style={[
               styles.twoColGrid,

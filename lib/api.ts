@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
-import { WeightJourney, MealLog, SleepLog, Referral, RewardTransaction, ReferralSummary } from './types';
+import { WeightJourney, MealLog, SleepLog, Referral, RewardTransaction, ReferralSummary, StepLog } from './types';
+
 
 
 export type RecipeRecommendation = {
@@ -539,5 +540,46 @@ export async function fetchUserReferralSummary(userId: string): Promise<Referral
     return null;
   }
 }
+
+// 9. Step Log API Helpers
+export async function saveUserStepLog(
+  userId: string,
+  todayLog: StepLog,
+  customGoal?: number
+): Promise<boolean> {
+  try {
+    const journey = await fetchUserJourney(userId);
+    const currentJourney: WeightJourney = journey || { history: [] };
+
+    const stepLogs = currentJourney.stepLogs || [];
+    const todayStr = todayLog.date.split('T')[0];
+
+    const existingIdx = stepLogs.findIndex(s => s.date.split('T')[0] === todayStr);
+
+    let updatedStepLogs: StepLog[];
+    if (existingIdx >= 0) {
+      updatedStepLogs = [...stepLogs];
+      updatedStepLogs[existingIdx] = {
+        ...updatedStepLogs[existingIdx],
+        ...todayLog,
+        date: todayStr,
+      };
+    } else {
+      updatedStepLogs = [{ ...todayLog, date: todayStr }, ...stepLogs];
+    }
+
+    const updatedJourney: WeightJourney = {
+      ...currentJourney,
+      stepGoal: customGoal ?? currentJourney.stepGoal ?? 10000,
+      stepLogs: updatedStepLogs,
+    };
+
+    return await saveUserJourney(userId, updatedJourney);
+  } catch (err) {
+    console.error('Failed to save step log to Supabase:', err);
+    return false;
+  }
+}
+
 
 

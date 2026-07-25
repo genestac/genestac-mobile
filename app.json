@@ -33,7 +33,14 @@
     "scheme": "genestac",
     "plugins": [
       "expo-router",
-      "expo-secure-store"
-    ]
+      "expo-secure-store",
+      "expo-web-browser"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "8dbf39f4-6b88-41cf-83f2-3ed625f213de"
+      }
+    }
   }
 }

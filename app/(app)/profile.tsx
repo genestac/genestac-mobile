@@ -14,6 +14,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
+import * as AuthSession from "expo-auth-session";
+import Svg, { Path } from "react-native-svg";
 import { supabase } from "@/lib/supabase";
 import { Colors, Fonts, Spacing, Radius } from "@/constants/colors";
 
@@ -34,6 +37,15 @@ export default function ProfileScreen() {
   const [showPwModal, setShowPwModal] = useState(false);
   const [newPw, setNewPw] = useState("");
   const [savingPw, setSavingPw] = useState(false);
+
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+  useEffect(() => {
+    WebBrowser.warmUpAsync();
+    return () => {
+      WebBrowser.coolDownAsync();
+    };
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -109,6 +121,65 @@ export default function ProfileScreen() {
     ]);
   };
 
+  const handleLinkGoogle = async () => {
+    try {
+      setGoogleLoading(true);
+      const redirectUrl = AuthSession.makeRedirectUri({
+        scheme: "genestac",
+        path: "auth/callback",
+      });
+
+      const { data, error } = await supabase.auth.linkIdentity({
+        provider: "google",
+        options: {
+          redirectTo: redirectUrl,
+          skipBrowserRedirect: true,
+        },
+      });
+
+      if (error || !data?.url) {
+        Alert.alert("Link Failed", error?.message ?? "Could not start Google link.");
+        return;
+      }
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+
+      if (result.type === "success" && result.url) {
+        const url = new URL(result.url);
+        const params = new URLSearchParams(
+          url.hash ? url.hash.substring(1) : url.search.substring(1)
+        );
+        const accessToken = params.get("access_token");
+        const refreshToken = params.get("refresh_token");
+
+        if (accessToken && refreshToken) {
+          const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (!sessionError && sessionData.session?.user) {
+            setUser(sessionData.session.user);
+            Alert.alert("Success", "Google account connected successfully!");
+            return;
+          }
+        }
+        
+        // Fallback to refresh session
+        const { data: refreshData } = await supabase.auth.refreshSession();
+        if (refreshData?.session?.user) {
+          setUser(refreshData.session.user);
+          Alert.alert("Success", "Google account connected successfully!");
+        } else {
+          Alert.alert("Link Complete", "Account linked but couldn't refresh session.");
+        }
+      }
+    } catch (err: any) {
+      Alert.alert("Error", err.message ?? "Something went wrong.");
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
   if (loading)
     return (
       <SafeAreaView style={s.center} edges={["top", "left", "right"]}>
@@ -120,6 +191,7 @@ export default function ProfileScreen() {
   const email = profile?.email ?? user?.email ?? "";
   const initials = name.slice(0, 2).toUpperCase();
   const userId = user?.id?.slice(0, 8) ?? "";
+  const isGoogleConnected = user?.app_metadata?.providers?.includes("google") ?? false;
 
   return (
     <SafeAreaView style={s.flex} edges={["top", "left", "right"]}>
@@ -231,6 +303,37 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Linked Accounts */}
+        <View style={s.sectionCard}>
+          <Text style={s.sectionTitle}>Linked Accounts</Text>
+          <View style={{ padding: Spacing.md }}>
+            <TouchableOpacity
+              style={[
+                s.googleBtn,
+                (googleLoading || isGoogleConnected) && s.googleBtnDisabled,
+              ]}
+              onPress={handleLinkGoogle}
+              disabled={googleLoading || isGoogleConnected}
+              activeOpacity={0.82}
+            >
+              {googleLoading ? (
+                <ActivityIndicator size="small" color={Colors.textSecondary} />
+              ) : (
+                <>
+                  <Svg width={20} height={20} viewBox="0 0 24 24">
+                    <Path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                    <Path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                    <Path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
+                    <Path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                  </Svg>
+                  <Text style={s.googleBtnText}>
+                    {isGoogleConnected ? "Connected with Google" : "Connect with Google"}
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
 
         {/* Sign Out */}
         <TouchableOpacity style={s.signOutBtn} onPress={handleSignOut}>
@@ -557,4 +660,30 @@ const s = StyleSheet.create({
   },
   footerCopyright: { fontSize: 11, color: Colors.textMuted },
   footerLegalLink: { fontSize: 11, color: Colors.textSecondary },
+  googleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: Spacing.sm,
+    paddingVertical: 14,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderColor: Colors.borderLight,
+    backgroundColor: Colors.white,
+    shadowColor: Colors.dark,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
+  googleBtnDisabled: {
+    opacity: 0.5,
+  },
+  googleBtnText: {
+    fontSize: Fonts.sizes.md,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+  },
 });

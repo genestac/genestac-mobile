@@ -14,10 +14,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
-import * as AuthSession from "expo-auth-session";
 import Svg, { Path } from "react-native-svg";
 import { supabase } from "@/lib/supabase";
+import { safeWebBrowser, makeRedirectUri } from "@/lib/webBrowser";
 import { Colors, Fonts, Spacing, Radius } from "@/constants/colors";
 
 const SETTINGS = [
@@ -41,9 +40,9 @@ export default function ProfileScreen() {
   const [googleLoading, setGoogleLoading] = useState(false);
 
   useEffect(() => {
-    WebBrowser.warmUpAsync();
+    safeWebBrowser.warmUpAsync();
     return () => {
-      WebBrowser.coolDownAsync();
+      safeWebBrowser.coolDownAsync();
     };
   }, []);
 
@@ -124,7 +123,7 @@ export default function ProfileScreen() {
   const handleLinkGoogle = async () => {
     try {
       setGoogleLoading(true);
-      const redirectUrl = AuthSession.makeRedirectUri({
+      const redirectUrl = makeRedirectUri({
         scheme: "genestac",
         path: "auth/callback",
       });
@@ -142,7 +141,7 @@ export default function ProfileScreen() {
         return;
       }
 
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+      const result = await safeWebBrowser.openAuthSessionAsync(data.url, redirectUrl);
 
       if (result.type === "success" && result.url) {
         const url = new URL(result.url);

@@ -16,15 +16,14 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
-import * as WebBrowser from 'expo-web-browser';
-import * as AuthSession from 'expo-auth-session';
 import { supabase } from '@/lib/supabase';
+import { safeWebBrowser, makeRedirectUri } from '@/lib/webBrowser';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Colors, Fonts, Spacing, Radius } from '@/constants/colors';
 
 // Required for OAuth redirects on Android
-WebBrowser.maybeCompleteAuthSession();
+safeWebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -35,9 +34,9 @@ export default function LoginScreen() {
 
   // Warm up the browser for a faster OAuth experience
   useEffect(() => {
-    WebBrowser.warmUpAsync();
+    safeWebBrowser.warmUpAsync();
     return () => {
-      WebBrowser.coolDownAsync();
+      safeWebBrowser.coolDownAsync();
     };
   }, []);
 
@@ -48,7 +47,7 @@ export default function LoginScreen() {
       // NOTE: Google OAuth works correctly only in a Development Build (not Expo Go).
       // Run `eas build --profile development --platform android` to get a dev build APK,
       // install it, and this will work perfectly with genestac://auth/callback.
-      const redirectUrl = AuthSession.makeRedirectUri({
+      const redirectUrl = makeRedirectUri({
         scheme: 'genestac',
         path: 'auth/callback',
       });
@@ -66,13 +65,17 @@ export default function LoginScreen() {
         return;
       }
 
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+      const result = await safeWebBrowser.openAuthSessionAsync(data.url, redirectUrl);
 
       if (result.type === 'success' && result.url) {
-        const url = new URL(result.url);
-        const params = new URLSearchParams(
-          url.hash ? url.hash.substring(1) : url.search.substring(1)
-        );
+        const rawUrl = result.url;
+        let queryOrHash = '';
+        if (rawUrl.includes('#')) {
+          queryOrHash = rawUrl.substring(rawUrl.indexOf('#') + 1);
+        } else if (rawUrl.includes('?')) {
+          queryOrHash = rawUrl.substring(rawUrl.indexOf('?') + 1);
+        }
+        const params = new URLSearchParams(queryOrHash);
         const accessToken = params.get('access_token');
         const refreshToken = params.get('refresh_token');
 

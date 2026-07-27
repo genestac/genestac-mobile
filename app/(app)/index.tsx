@@ -1419,15 +1419,16 @@ const styles = StyleSheet.create({
   vsBadgeCircle: {
     width: 28,
     height: 28,
-    borderRadius: 14,
-    backgroundColor: "#1E293B",
+    borderRadius:14,
     alignItems: "center",
     justifyContent: "center",
+    borderColor:"#000000",
+    borderWidth:1,
   },
   vsBadgeText: {
     fontSize: 10,
     fontWeight: "900",
-    color: "#FFFFFF",
+    color: "#000000",
   },
   weeklySummaryBanner: {
     flexDirection: "row",

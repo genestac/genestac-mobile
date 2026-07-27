@@ -8,6 +8,8 @@ import { Colors, Fonts } from '@/constants/colors';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Platform } from 'react-native';
 
+import { syncAllNotifications } from '@/lib/notifications';
+
 function TabIcon({ name, focused, label }: { name: any; focused: boolean; label: string }) {
   return (
     <View style={styles.tabItem}>
@@ -37,6 +39,9 @@ export default function AppLayout() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) {
         router.replace('/(auth)/login');
+      } else {
+        const { getNotificationPreferences } = require('@/lib/notificationStorage');
+        getNotificationPreferences().then(syncAllNotifications).catch(console.error);
       }
       setChecking(false);
     };

@@ -18,6 +18,7 @@ import Svg, { Path } from "react-native-svg";
 import { supabase } from "@/lib/supabase";
 import { safeWebBrowser, makeRedirectUri } from "@/lib/webBrowser";
 import { Colors, Fonts, Spacing, Radius } from "@/constants/colors";
+import { NotificationSettingsCard } from "@/components/NotificationSettingsCard";
 
 const SETTINGS = [
   { key: "name", icon: "person-outline", label: "Full Name" },
@@ -253,6 +254,9 @@ export default function ProfileScreen() {
             />
           </View>
         </View>
+
+        {/* Lifestyle & Habit Notifications */}
+        <NotificationSettingsCard />
 
         {/* Rewards & Referrals */}
         <View style={s.sectionCard}>

@@ -28,11 +28,17 @@ export const CurrentStatsCards: React.FC<CurrentStatsCardsProps> = ({
           <Ionicons name="scale-outline" size={15} color="#2563EB" />
           <Text style={styles.sidebarStatLabel}>Current</Text>
         </View>
-        <Text style={styles.sidebarStatValue}>{current} kg</Text>
+        <Text style={styles.sidebarStatValue}>
+          {current > 0 ? `${current} kg` : "—"}
+        </Text>
         {lastLoggedDate ? (
           <Text style={styles.sidebarStatDateLabel}>{lastLoggedDate}</Text>
-        ) : null}
-        <Text style={styles.sidebarStatSubLabel}>-{lost} kg lost</Text>
+        ) : (
+          <Text style={styles.sidebarStatDateLabel}>No logs yet</Text>
+        )}
+        <Text style={styles.sidebarStatSubLabel}>
+          {lost > 0 ? `-${lost} kg lost` : "0 kg lost"}
+        </Text>
       </View>
 
       {/* Start Weight Card */}
@@ -41,7 +47,9 @@ export const CurrentStatsCards: React.FC<CurrentStatsCardsProps> = ({
           <Ionicons name="flag-outline" size={15} color="#64748B" />
           <Text style={styles.sidebarStatLabel}>Start</Text>
         </View>
-        <Text style={styles.sidebarStatValue}>{startWeight} kg</Text>
+        <Text style={styles.sidebarStatValue}>
+          {startWeight > 0 ? `${startWeight} kg` : "—"}
+        </Text>
         <Text style={styles.sidebarStatSubLabel}>Baseline</Text>
       </View>
 
@@ -51,8 +59,12 @@ export const CurrentStatsCards: React.FC<CurrentStatsCardsProps> = ({
           <Ionicons name="trophy-outline" size={15} color="#059669" />
           <Text style={styles.sidebarStatLabel}>Goal</Text>
         </View>
-        <Text style={styles.sidebarStatValue}>{target} kg</Text>
-        <Text style={styles.sidebarStatSubLabel}>{toGo} kg to go</Text>
+        <Text style={styles.sidebarStatValue}>
+          {target > 0 ? `${target} kg` : "—"}
+        </Text>
+        <Text style={styles.sidebarStatSubLabel}>
+          {toGo > 0 ? `${toGo} kg to go` : target > 0 ? `Goal set` : "Set goal"}
+        </Text>
       </View>
     </View>
   );

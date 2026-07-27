@@ -285,7 +285,7 @@ export default function StepsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <StatusBar style="dark" />
 
       {/* Header */}
@@ -577,6 +577,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: Spacing.md,
+    paddingBottom: 40,
     gap: Spacing.md,
   },
   warningBanner: {

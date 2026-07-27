@@ -52,6 +52,7 @@ import { HealthyRecipesWidget } from "@/components/dashboard/HealthyRecipesWidge
 import { BodyMeasurementsWidget } from "@/components/dashboard/BodyMeasurementsWidget";
 import { HabitsChecklistWidget } from "@/components/dashboard/HabitsChecklistWidget";
 import { HistoryModal, HistoryType } from "@/components/dashboard/HistoryModal";
+import { AchievementsSection } from "@/components/dashboard/AchievementsSection";
 
 const DAYS = ["7D", "30D", "90D", "All"];
 
@@ -346,6 +347,68 @@ export default function DashboardScreen() {
     return s;
   })();
 
+  // Last Sync Date from DB
+  const lastSyncDate =
+    journey.history && journey.history.length > 0
+      ? formatDateShort(journey.history[journey.history.length - 1].date)
+      : "—";
+
+  // Dynamic calculation for Weekly Comparison: This Week vs Last Week
+  const getWeightLossInWindow = (startDaysAgo: number, endDaysAgo: number) => {
+    const h = journey.history || [];
+    if (h.length === 0) return 0;
+    const now = new Date();
+    const startDate = new Date(now);
+    startDate.setDate(now.getDate() - startDaysAgo);
+    const endDate = new Date(now);
+    endDate.setDate(now.getDate() - endDaysAgo);
+
+    const windowLogs = h.filter((e) => {
+      const d = new Date(e.date);
+      return d >= startDate && d <= endDate;
+    });
+
+    if (windowLogs.length >= 2) {
+      return parseFloat(
+        (windowLogs[0].weight - windowLogs[windowLogs.length - 1].weight).toFixed(1)
+      );
+    }
+
+    const endLog = [...h].reverse().find((e) => new Date(e.date) <= endDate) || h[h.length - 1];
+    const startLog = [...h].reverse().find((e) => new Date(e.date) <= startDate) || h[0];
+    if (startLog && endLog && startLog.date !== endLog.date) {
+      return parseFloat((startLog.weight - endLog.weight).toFixed(1));
+    }
+    return 0;
+  };
+
+  const thisWeekLoss = getWeightLossInWindow(7, 0);
+  const lastWeekLoss = getWeightLossInWindow(14, 7);
+
+  // Dynamic calculation for Average Weekly Loss
+  const avgWeeklyLoss = (() => {
+    const h = journey.history || [];
+    if (h.length < 2) return 0.7;
+    const firstTime = new Date(h[0].date).getTime();
+    const lastTime = new Date(h[h.length - 1].date).getTime();
+    const diffDays = Math.max(1, Math.round((lastTime - firstTime) / (1000 * 60 * 60 * 24)));
+    const diffWeeks = Math.max(1, diffDays / 7);
+    const totalNetLost = h[0].weight - h[h.length - 1].weight;
+    if (totalNetLost <= 0) return 0;
+    return parseFloat((totalNetLost / diffWeeks).toFixed(1));
+  })();
+
+  // Dynamic Achievements Badges
+  const milestoneTargets = [3, 5, 10, 15, 20, 25, 30, 40, 50];
+  const unlockedBadges = milestoneTargets.filter((m) => lost >= m);
+  const nextMilestone =
+    milestoneTargets.find((m) => lost < m) ??
+    (unlockedBadges.length > 0 ? unlockedBadges[unlockedBadges.length - 1] + 5 : 3);
+  const nextToGo = Math.max(
+    0,
+    parseFloat((nextMilestone - Math.max(0, lost)).toFixed(1))
+  );
+
   const chartData = filtered;
 
   const mainChartWidth = isDesktop
@@ -562,7 +625,7 @@ export default function DashboardScreen() {
               </View>
               <View>
                 <Text style={styles.chipLabelText}>Last Sync</Text>
-                <Text style={styles.chipValueText}>Jul 15</Text>
+                <Text style={styles.chipValueText}>{lastSyncDate}</Text>
               </View>
             </View>
 
@@ -587,7 +650,7 @@ export default function DashboardScreen() {
               <View>
                 <Text style={styles.chipLabelText}>Total Lost</Text>
                 <Text style={styles.chipValueText}>
-                  {lost > 0 ? `${lost} kg` : "6.5 kg"}
+                  {lost > 0 ? `${lost} kg` : "0.0 kg"}
                 </Text>
               </View>
             </View>
@@ -607,41 +670,108 @@ export default function DashboardScreen() {
             </View>
           </View>
 
-          {/* Weekly Comparison Line */}
-          <View style={styles.weeklyAlertBanner}>
-            <Text style={styles.weeklyAlertText}>
-              <Text style={{ fontWeight: "600", color: "#475569" }}>
-                This week vs last week:
-              </Text>{" "}
-              <Text style={{ fontWeight: "700", color: "#1E293B" }}>
-                0.0 kg lost this week
-              </Text>{" "}
-              <Text style={{ color: "#EF4444", fontWeight: "700" }}>
-                🔻 vs 1.0 kg lost last week
-              </Text>
-            </Text>
-          </View>
+          {/* Weekly Performance Achievement Card */}
+          <View style={styles.weeklyAchievementCard}>
+            {/* Header Row */}
+            <View style={styles.weeklyHeaderRow}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <View style={styles.weeklyHeaderIconWrap}>
+                  <Ionicons name="trending-down" size={16} color="#10B981" />
+                </View>
+                <View>
+                  <Text style={styles.weeklyHeaderTitle}>Weekly Performance</Text>
+                  <Text style={styles.weeklyHeaderSub}>This Week vs Last Week</Text>
+                </View>
+              </View>
 
-          {/* Achievements Card */}
-          <View style={styles.achievementsBox}>
-            <View style={styles.achievementsHeader}>
-              <Ionicons name="bulb-outline" size={16} color="#EA580C" />
-              <Text style={styles.achievementsTitle}>Achievements</Text>
-            </View>
-            <View style={styles.badgesFlexRow}>
-              <View style={[styles.badgeItemPill, styles.badgeItemActive]}>
-                <Text style={styles.badgeActiveText}>🏆 &gt;3kg lost</Text>
-              </View>
-              <View style={[styles.badgeItemPill, styles.badgeItemActive]}>
-                <Text style={styles.badgeActiveText}>🏆 &gt;5kg lost</Text>
-              </View>
-              <View style={styles.badgeItemPill}>
-                <Text style={styles.badgeMutedText}>
-                  Next: &gt;10kg ({toGo}kg to go)
+              <View
+                style={[
+                  styles.weeklyPaceChip,
+                  thisWeekLoss >= lastWeekLoss
+                    ? { backgroundColor: "#ECFDF5", borderColor: "#A7F3D0" }
+                    : { backgroundColor: "#FFF7ED", borderColor: "#FFEDD5" },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.weeklyPaceChipText,
+                    thisWeekLoss >= lastWeekLoss
+                      ? { color: "#047857" }
+                      : { color: "#C2410C" },
+                  ]}
+                >
+                  {thisWeekLoss >= lastWeekLoss ? "🔥 Faster Pace" : "⚡ Keep Pushing"}
                 </Text>
               </View>
             </View>
+
+            {/* Comparison Badges Row */}
+            <View style={styles.weeklyStatsRow}>
+              {/* This Week Badge */}
+              <View style={[styles.weeklyStatMiniBox, styles.weeklyStatBoxActive]}>
+                <Text style={styles.weeklyStatLabel}>THIS WEEK</Text>
+                <Text style={styles.weeklyStatValue}>
+                  {thisWeekLoss >= 0
+                    ? `${thisWeekLoss.toFixed(1)} kg`
+                    : `+${Math.abs(thisWeekLoss).toFixed(1)} kg`}
+                </Text>
+                <Text style={styles.weeklyStatSub}>
+                  {thisWeekLoss >= 0 ? "Lost" : "Gained"}
+                </Text>
+              </View>
+
+              {/* VS Circle Badge */}
+              <View style={styles.vsBadgeCircle}>
+                <Text style={styles.vsBadgeText}>VS</Text>
+              </View>
+
+              {/* Last Week Badge */}
+              <View style={styles.weeklyStatMiniBox}>
+                <Text style={styles.weeklyStatLabel}>LAST WEEK</Text>
+                <Text style={styles.weeklyStatValue}>
+                  {lastWeekLoss >= 0
+                    ? `${lastWeekLoss.toFixed(1)} kg`
+                    : `+${Math.abs(lastWeekLoss).toFixed(1)} kg`}
+                </Text>
+                <Text style={styles.weeklyStatSub}>
+                  {lastWeekLoss >= 0 ? "Lost" : "Gained"}
+                </Text>
+              </View>
+            </View>
+
+            {/* Motivational Victory Summary Banner */}
+            <View
+              style={[
+                styles.weeklySummaryBanner,
+                thisWeekLoss >= lastWeekLoss
+                  ? { backgroundColor: "#F0FDF4", borderColor: "#DCFCE7" }
+                  : { backgroundColor: "#F8FAFC", borderColor: "#E2E8F0" },
+              ]}
+            >
+              <Ionicons
+                name={thisWeekLoss >= lastWeekLoss ? "trophy" : "sparkles"}
+                size={15}
+                color={thisWeekLoss >= lastWeekLoss ? "#059669" : "#64748B"}
+              />
+              <Text
+                style={[
+                  styles.weeklySummaryText,
+                  thisWeekLoss >= lastWeekLoss
+                    ? { color: "#15803D" }
+                    : { color: "#475569" },
+                ]}
+              >
+                {thisWeekLoss > lastWeekLoss
+                  ? `Great job! You lost ${(thisWeekLoss - lastWeekLoss).toFixed(1)} kg more than last week!`
+                  : thisWeekLoss === lastWeekLoss && thisWeekLoss > 0
+                  ? `Consistent pace! Matching last week's ${thisWeekLoss.toFixed(1)} kg loss.`
+                  : `Keep going! Every effort builds long-term progress.`}
+              </Text>
+            </View>
           </View>
+
+          {/* Achievements Section */}
+          <AchievementsSection lostKg={lost} />
 
           {/* Daily Steps Card */}
           <TouchableOpacity
@@ -717,7 +847,7 @@ export default function DashboardScreen() {
               <Text style={[styles.cardHeaderTitle, { alignSelf: "flex-start" }]}>
                 Average Weekly Loss
               </Text>
-              <GaugeMeter value={0.7} maxVal={2.0} />
+              <GaugeMeter value={avgWeeklyLoss} maxVal={2.0} />
             </View>
 
             {/* My Transformation Gallery */}
@@ -1211,8 +1341,107 @@ const styles = StyleSheet.create({
   },
   chipLabelText: { fontSize: 11, color: "#64748B", fontWeight: "500" },
   chipValueText: { fontSize: 15, fontWeight: "800", color: "#1E293B" },
-  weeklyAlertBanner: { paddingVertical: 4 },
-  weeklyAlertText: { fontSize: 13, color: "#475569" },
+  weeklyAchievementCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    gap: 12,
+  },
+  weeklyHeaderRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  weeklyHeaderIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#ECFDF5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  weeklyHeaderTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1E293B",
+  },
+  weeklyHeaderSub: {
+    fontSize: 11,
+    color: "#64748B",
+  },
+  weeklyPaceChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  weeklyPaceChipText: {
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  weeklyStatsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  weeklyStatMiniBox: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+    padding: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  weeklyStatBoxActive: {
+    backgroundColor: "#F0F9FF",
+    borderColor: "#BAE6FD",
+  },
+  weeklyStatLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#64748B",
+    letterSpacing: 0.5,
+  },
+  weeklyStatValue: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: "#1E293B",
+    marginTop: 2,
+  },
+  weeklyStatSub: {
+    fontSize: 11,
+    color: "#64748B",
+    marginTop: 1,
+  },
+  vsBadgeCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "#1E293B",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  vsBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: "#FFFFFF",
+  },
+  weeklySummaryBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  weeklySummaryText: {
+    fontSize: 12,
+    fontWeight: "600",
+    flex: 1,
+  },
   achievementsBox: {
     backgroundColor: "#FFFFFF",
     borderRadius: 10,

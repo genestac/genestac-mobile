@@ -350,7 +350,7 @@ export default function ProfileScreen() {
                 style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
               >
                 <Image
-                  source={require("../../assets/icon.png")}
+                  source={require("../../assets/images/brand/logo.webp")}
                   style={{ width: 70, height: 60, resizeMode: "contain"}}
                 />
               </View>

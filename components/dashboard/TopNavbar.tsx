@@ -17,7 +17,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ userName }) => {
         <View style={styles.topNavLeft}>
           <View style={styles.logoWrap}>
             <Image
-              source={require("../../assets/icon.png")}
+              source={require("../../assets/images/brand/logo.webp")}
               style={styles.logoImage}
               resizeMode="contain"
             />

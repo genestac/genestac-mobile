@@ -1,7 +1,6 @@
 import React from "react";
-import { View, Text, StyleSheet, Image, TextInput } from "react-native";
+import { View, Text, StyleSheet, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Ionicons } from "@expo/vector-icons";
 
 interface TopNavbarProps {
   userName: string;
@@ -17,14 +16,13 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ userName }) => {
         <View style={styles.topNavLeft}>
           <View style={styles.logoWrap}>
             <Image
-              source={require("../../assets/icon.png")}
+              source={require("../../assets/images/brand/logo.webp")}
               style={styles.logoImage}
               resizeMode="contain"
             />
+            <Text style={styles.logoText}>genestac</Text>
           </View>
         </View>
-
-        
 
         <View style={styles.topNavRight}>
           <View style={styles.topProfileBadge}>
@@ -40,7 +38,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ userName }) => {
 
 const styles = StyleSheet.create({
   topNavbar: {
-    height: 72,
+    height: 64,
     backgroundColor: "#FFFFFF",
     flexDirection: "row",
     alignItems: "center",
@@ -52,33 +50,24 @@ const styles = StyleSheet.create({
   topNavLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
   },
   logoWrap: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+    alignItems: "flex-end",
+    gap: 6,
   },
   logoImage: {
-    width: 70,
-    height: 70,
+    width: 44,
+    height: 44,
   },
-  topNavSearchWrap: {
-    flex: 1,
-    maxWidth: 400,
-    marginHorizontal: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F1F5F9",
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    height: 38,
-    gap: 8,
-  },
-  topNavSearchInput: {
-    flex: 1,
-    fontSize: 13,
-    color: "#1E293B",
+  logoText: {
+    position:"absolute",
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#00ACC1",
+    letterSpacing: -0.5,
+    marginLeft:29,
+    marginTop:-15
   },
   topNavRight: {
     flexDirection: "row",

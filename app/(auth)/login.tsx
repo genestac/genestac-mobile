@@ -10,20 +10,24 @@ import {
   Alert,
   Image,
   ActivityIndicator,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Ionicons } from '@expo/vector-icons';
-import Svg, { Path } from 'react-native-svg';
+import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import Svg, { Path, Defs, LinearGradient as SvgGradient, Stop, Text as SvgText } from 'react-native-svg';
+import { SafeLinearGradient as LinearGradient } from '@/components/ui/SafeLinearGradient';
+import MaskedView from '@react-native-masked-view/masked-view';
 import { supabase } from '@/lib/supabase';
 import { safeWebBrowser, makeRedirectUri } from '@/lib/webBrowser';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Colors, Fonts, Spacing, Radius } from '@/constants/colors';
 
 // Required for OAuth redirects on Android
 safeWebBrowser.maybeCompleteAuthSession();
+
+const { width } = Dimensions.get('window');
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -44,9 +48,6 @@ export default function LoginScreen() {
     try {
       setGoogleLoading(true);
 
-      // NOTE: Google OAuth works correctly only in a Development Build (not Expo Go).
-      // Run `eas build --profile development --platform android` to get a dev build APK,
-      // install it, and this will work perfectly with genestac://auth/callback.
       const redirectUrl = makeRedirectUri({
         scheme: 'genestac',
         path: 'auth/callback',
@@ -110,7 +111,6 @@ export default function LoginScreen() {
     }
   };
 
-
   const validate = () => {
     const errs: Record<string, string> = {};
     if (!email.trim()) errs.email = 'Email is required';
@@ -136,81 +136,104 @@ export default function LoginScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.flex} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
+      <StatusBar style="dark" />
+
+      {/* Header matching onboarding theme */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.replace('/(onboarding)/welcome')} style={styles.backBtn} hitSlop={12}>
+          <Ionicons name="arrow-back" size={22} color="#1f2937" />
+        </TouchableOpacity>
+        <View style={styles.logoRow}>
+          <Image source={require('@/assets/images/brand/logo.webp')} style={styles.logoIcon} resizeMode="contain" />
+          <Text style={styles.logoText}>genestac</Text>
+        </View>
+        <View style={styles.backBtn} />
+      </View>
+
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-      <StatusBar style="dark" />
-      <ScrollView
-        style={styles.flex}
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* Header Brand */}
-        <View style={styles.brandSection}>
-          <View style={styles.brandHeader}>
-            <View>
-              <Image
-                source={require('@/assets/icon.png')}
-                style={styles.logoImage}
-                resizeMode="contain"
+        <ScrollView
+          style={styles.flex}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+
+          {/* Title Section — matches onboarding style */}
+          <View style={styles.titleSection}>
+            <MaskedView maskElement={<Text style={styles.title}>Welcome Back</Text>}>
+              <LinearGradient colors={['#12879a', '#5cbf5a']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                <Text style={[styles.title, { opacity: 0 }]}>Welcome Back</Text>
+              </LinearGradient>
+            </MaskedView>
+            <View style={styles.titleUnderline} />
+            <Text style={styles.question}>Sign in to your account</Text>
+            <Text style={styles.subQuestion}>Your personalized weight loss journey awaits</Text>
+          </View>
+
+          {/* Form Card */}
+          <View style={styles.card}>
+            <View style={styles.form}>
+              <Input
+                label="Email Address"
+                value={email}
+                onChangeText={(t) => {
+                  setEmail(t);
+                  setErrors((e) => ({ ...e, email: '' }));
+                }}
+                placeholder="you@example.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoComplete="email"
+                leftIcon="mail-outline"
+                error={errors.email}
               />
+
+              <Input
+                label="Password"
+                value={password}
+                onChangeText={(t) => {
+                  setPassword(t);
+                  setErrors((e) => ({ ...e, password: '' }));
+                }}
+                placeholder="••••••••"
+                isPassword
+                leftIcon="lock-closed-outline"
+                error={errors.password}
+              />
+
+              <TouchableOpacity
+                style={styles.forgotBtn}
+                onPress={() => router.push('/(auth)/forgot-password')}
+              >
+                <Text style={styles.forgotText}>Forgot Password?</Text>
+              </TouchableOpacity>
             </View>
-            {/* <Text style={styles.brandName}>Genestac</Text> */}
           </View>
-          <Text style={styles.brandTagline}>Your weight loss journey starts here</Text>
-        </View>
 
-        {/* Card */}
-        <View style={styles.card}>
-          <Text style={styles.title}>Welcome back</Text>
-          <Text style={styles.subtitle}>Sign in to your account</Text>
-
-          <View style={styles.form}>
-            <Input
-              label="Email Address"
-              value={email}
-              onChangeText={(t) => {
-                setEmail(t);
-                setErrors((e) => ({ ...e, email: '' }));
-              }}
-              placeholder="you@example.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-              leftIcon="mail-outline"
-              error={errors.email}
-            />
-
-            <Input
-              label="Password"
-              value={password}
-              onChangeText={(t) => {
-                setPassword(t);
-                setErrors((e) => ({ ...e, password: '' }));
-              }}
-              placeholder="••••••••"
-              isPassword
-              leftIcon="lock-closed-outline"
-              error={errors.password}
-            />
-
-            <TouchableOpacity
-              style={styles.forgotBtn}
-              onPress={() => router.push('/(auth)/forgot-password')}
+          {/* Sign In Button — matches onboarding gradient button */}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={handleLogin}
+            disabled={loading}
+            style={styles.continueWrap}
+          >
+            <LinearGradient
+              colors={['#12879a', '#5cbf5a']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.continueBtn}
             >
-              <Text style={styles.forgotText}>Forgot Password?</Text>
-            </TouchableOpacity>
-
-            <Button
-              title="Sign In"
-              onPress={handleLogin}
-              loading={loading}
-              style={styles.submitBtn}
-            />
-          </View>
+              {loading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.continueTxt}>Sign In   →</Text>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
 
           {/* Divider */}
           <View style={styles.divider}>
@@ -220,194 +243,252 @@ export default function LoginScreen() {
           </View>
 
           {/* Google Sign-In */}
-          <TouchableOpacity
-            style={[styles.googleBtn, googleLoading && styles.googleBtnDisabled]}
-            onPress={handleGoogleLogin}
-            disabled={googleLoading}
-            activeOpacity={0.82}
-          >
-            {googleLoading ? (
-              <ActivityIndicator size="small" color={Colors.textSecondary} />
-            ) : (
-              <>
-                <Svg width={20} height={20} viewBox="0 0 24 24">
-                  <Path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                  <Path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                  <Path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
-                  <Path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                </Svg>
-                <Text style={styles.googleBtnText}>Continue with Google</Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          {/* Register CTA */}
-          <View style={styles.registerRow}>
-            <Text style={styles.registerText}>Don't have an account?</Text>
-            <TouchableOpacity onPress={() => router.push('/(auth)/register')}>
-              <Text style={styles.registerLink}> Create Account</Text>
+          <View style={styles.googleWrap}>
+            <TouchableOpacity
+              style={[styles.googleBtn, googleLoading && styles.googleBtnDisabled]}
+              onPress={handleGoogleLogin}
+              disabled={googleLoading}
+              activeOpacity={0.82}
+            >
+              {googleLoading ? (
+                <ActivityIndicator size="small" color="#374151" />
+              ) : (
+                <>
+                  <Svg width={20} height={20} viewBox="0 0 24 24">
+                    <Path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                    <Path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                    <Path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
+                    <Path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                  </Svg>
+                  <Text style={styles.googleBtnText}>Continue with Google</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
-        </View>
 
-        {/* Footer */}
-        <Text style={styles.footer}>
-          By signing in you agree to our{'\n'}
-          <Text style={styles.footerLink}>Terms & Conditions</Text> and{' '}
-          <Text style={styles.footerLink}>Privacy Policy</Text>
-        </Text>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          {/* Create Account → Welcome Screen */}
+          <View style={styles.registerRow}>
+            <Text style={styles.registerText}>Don't have an account?</Text>
+            <TouchableOpacity onPress={() => router.replace('/(onboarding)/welcome')}>
+              <Text style={styles.registerLink}> Get Started</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Footer trust bar — matches onboarding footer */}
+          <View style={styles.footer}>
+            <View style={styles.footerItem}>
+              <FontAwesome5 name="user-md" size={14} color="#12879a" />
+              <Text style={styles.footerTxt}>{'Doctor Guided\nProgram'}</Text>
+            </View>
+            <View style={styles.footerDivider} />
+            <View style={styles.footerItem}>
+              <FontAwesome5 name="shield-alt" size={14} color="#12879a" />
+              <Text style={styles.footerTxt}>{'Safe &\nEffective'}</Text>
+            </View>
+            <View style={styles.footerDivider} />
+            <View style={styles.footerItem}>
+              <Ionicons name="person" size={14} color="#12879a" />
+              <Text style={styles.footerTxt}>{'Personalized\nfor You'}</Text>
+            </View>
+          </View>
+
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: {
+  safeArea: {
     flex: 1,
-    backgroundColor: Colors.background,
+    backgroundColor: '#f7fafb',
   },
+  flex: { flex: 1 },
   scroll: {
     flexGrow: 1,
-    paddingHorizontal: Spacing.lg,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.xl,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
   },
-  brandSection: {
-    alignItems: 'center',
-    marginBottom: Spacing.lg,
-  },
-  brandHeader: {
+
+  // ── Header (matches onboarding) ───────────────────────────────────────────
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.sm,
-    marginBottom: 4,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
-  logoCircle: {
-    width: 90,
-    height: 90,
-    backgroundColor: 'transparent',
+  backBtn: {
+    width: 36,
+    height: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logoImage: {
-    width: 90,
-    height: 90,
+  logoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
-  brandName: {
-    fontSize: 26,
+  logoIcon: {
+    width: 34,
+    height: 34,
+  },
+  logoText: {
+    fontSize: 20,
     fontWeight: '800',
-    color: Colors.textPrimary,
-    letterSpacing: -0.5,
+    color: '#12879a',
   },
-  brandTagline: {
-    fontSize: 14,
-    color: Colors.textMuted,
-    marginTop: 4,
-  },
-  card: {
-    backgroundColor: Colors.white,
-    borderRadius: Radius.xl,
-    padding: Spacing.lg,
-    shadowColor: Colors.dark,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.07,
-    shadowRadius: 16,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: Colors.borderLight,
+
+  // ── Title Section (matches onboarding) ────────────────────────────────────
+  titleSection: {
+    marginBottom: 16,
+    marginTop: 8,
   },
   title: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: Colors.textPrimary,
-    marginBottom: 4,
+    fontSize: 30,
+    fontWeight: '900',
     letterSpacing: -0.5,
   },
-  subtitle: {
+  titleUnderline: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#5cbf5a',
+    marginTop: 4,
+    marginBottom: 10,
+  },
+  question: {
     fontSize: 14,
-    color: Colors.textMuted,
-    marginBottom: Spacing.lg,
+    fontWeight: '700',
+    color: '#1f2937',
+    lineHeight: 20,
+    marginBottom: 4,
   },
-  form: {
-    gap: Spacing.md,
+  subQuestion: {
+    fontSize: 11,
+    color: '#6b7280',
+    lineHeight: 16,
   },
+
+  // ── Form Card ─────────────────────────────────────────────────────────────
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+    marginBottom: 16,
+  },
+  form: { gap: 14 },
   forgotBtn: {
     alignSelf: 'flex-end',
-    marginTop: -4,
   },
   forgotText: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.primaryLight,
+    color: '#12879a',
   },
-  submitBtn: {
-    marginTop: Spacing.xs,
+
+  // ── Gradient Continue Button (matches onboarding) ─────────────────────────
+  continueWrap: {
+    marginBottom: 16,
   },
+  continueBtn: {
+    borderRadius: 30,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  continueTxt: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+
+  // ── Divider ──────────────────────────────────────────────────────────────
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: Spacing.lg,
+    marginBottom: 16,
   },
   dividerLine: {
     flex: 1,
     height: 1,
-    backgroundColor: Colors.borderLight,
+    backgroundColor: '#e5e7eb',
   },
   dividerText: {
-    marginHorizontal: Spacing.md,
+    marginHorizontal: 12,
     fontSize: 13,
-    color: Colors.textMuted,
+    color: '#9ca3af',
     fontWeight: '500',
   },
-  registerRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  registerText: {
-    fontSize: 14,
-    color: Colors.textSecondary,
-  },
-  registerLink: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.primaryLight,
-  },
-  footer: {
-    textAlign: 'center',
-    fontSize: 12,
-    color: Colors.textMuted,
-    marginTop: Spacing.lg,
-    lineHeight: 16,
-  },
-  footerLink: {
-    color: Colors.primaryLight,
-    fontWeight: '600',
+
+  // ── Google Button ─────────────────────────────────────────────────────────
+  googleWrap: {
+    marginBottom: 20,
   },
   googleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.sm,
+    gap: 10,
     paddingVertical: 14,
-    borderRadius: Radius.md,
+    borderRadius: 30,
     borderWidth: 1.5,
-    borderColor: Colors.borderLight,
-    backgroundColor: Colors.white,
-    shadowColor: Colors.dark,
+    borderColor: '#e5e7eb',
+    backgroundColor: '#fff',
+    shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,
     shadowRadius: 6,
     elevation: 2,
   },
-  googleBtnDisabled: {
-    opacity: 0.5,
-  },
+  googleBtnDisabled: { opacity: 0.5 },
   googleBtnText: {
-    fontSize: Fonts.sizes.md,
+    fontSize: 15,
     fontWeight: '700',
-    color: Colors.textPrimary,
+    color: '#1f2937',
+  },
+
+  // ── Register Row ──────────────────────────────────────────────────────────
+  registerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  registerText: { fontSize: 14, color: '#6b7280' },
+  registerLink: { fontSize: 14, fontWeight: '700', color: '#12879a' },
+
+  // ── Footer (matches onboarding) ───────────────────────────────────────────
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  footerItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  footerDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: '#e5e7eb',
+  },
+  footerTxt: {
+    fontSize: 10,
+    color: '#374151',
+    textAlign: 'center',
+    lineHeight: 14,
+    marginTop: 2,
   },
 });
-

@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { SafeLinearGradient as LinearGradient } from '@/components/ui/SafeLinearGradient';
-import MaskedView from '@react-native-masked-view/masked-view';
+import { SafeMaskedView as MaskedView } from '@/components/ui/SafeMaskedView';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import Animated, {

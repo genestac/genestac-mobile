@@ -115,7 +115,9 @@ export default function ProfileScreen() {
         style: "destructive",
         onPress: async () => {
           await supabase.auth.signOut();
-          router.replace("/(auth)/login");
+          setTimeout(() => {
+            router.replace("/(auth)/login");
+          }, 0);
         },
       },
     ]);

@@ -38,7 +38,9 @@ export default function AppLayout() {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) {
-        router.replace('/(auth)/login');
+        setTimeout(() => {
+          router.replace('/(auth)/login');
+        }, 0);
       } else {
         const { getNotificationPreferences } = require('@/lib/notificationStorage');
         getNotificationPreferences().then(syncAllNotifications).catch(console.error);
@@ -49,7 +51,9 @@ export default function AppLayout() {
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) {
-        router.replace('/(auth)/login');
+        setTimeout(() => {
+          router.replace('/(auth)/login');
+        }, 0);
       }
     });
 

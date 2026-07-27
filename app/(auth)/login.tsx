@@ -18,7 +18,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import Svg, { Path, Defs, LinearGradient as SvgGradient, Stop, Text as SvgText } from 'react-native-svg';
 import { SafeLinearGradient as LinearGradient } from '@/components/ui/SafeLinearGradient';
-import MaskedView from '@react-native-masked-view/masked-view';
+import { SafeMaskedView as MaskedView } from '@/components/ui/SafeMaskedView';
 import { supabase } from '@/lib/supabase';
 import { safeWebBrowser, makeRedirectUri } from '@/lib/webBrowser';
 import { Button } from '@/components/ui/Button';

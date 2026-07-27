@@ -10,7 +10,7 @@ import {
   Animated,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { SafeLinearGradient as LinearGradient } from '@/components/ui/SafeLinearGradient';
 
 interface InputProps extends TextInputProps {
   label?: string;

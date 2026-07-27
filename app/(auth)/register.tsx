@@ -18,7 +18,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
-import { LinearGradient } from 'expo-linear-gradient';
+import { SafeLinearGradient as LinearGradient } from '@/components/ui/SafeLinearGradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 import { supabase } from '@/lib/supabase';
 import { safeWebBrowser, makeRedirectUri } from '@/lib/webBrowser';

@@ -12,6 +12,7 @@ export default function RootLayout() {
           <Stack.Screen name="index" />
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(app)" />
+          <Stack.Screen name="games" />
           <Stack.Screen name="(onboarding)" />
           {/* OAuth deep-link callback - genestac://auth/callback */}
           <Stack.Screen name="auth/callback" />

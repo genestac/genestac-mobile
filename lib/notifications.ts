@@ -113,27 +113,34 @@ export async function syncAllNotifications(
 
     await setupNotificationChannels();
 
-    // 2. Schedule Water Intake Reminders (Every N hours)
+    // 2. Schedule Water Intake Reminders (7:00 AM to 10:00 PM)
     if (prefs.waterRemindersEnabled && prefs.waterIntervalHours > 0) {
-      const seconds = prefs.waterIntervalHours * 3600;
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '💧 Hydration Time!',
-          body: 'Time to drink a glass of water to maintain focus and vitality.',
-          sound: true,
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-          seconds,
-          repeats: true,
-          channelId: 'lifestyle-reminders',
-        },
-      });
+      const start = prefs.waterStartHour ?? 7;
+      const end = prefs.waterEndHour ?? 22;
+      const step = prefs.waterIntervalHours;
+
+      for (let hour = start; hour <= end; hour += step) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: '💧 Hydration Time!',
+            body: 'Time to drink a glass of water to maintain focus and vitality.',
+            sound: true,
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DAILY,
+            hour,
+            minute: 0,
+            channelId: 'lifestyle-reminders',
+          },
+        });
+      }
     }
 
-    // 3. Schedule Hourly Step & Movement Reminders
+    // 3. Schedule Hourly Step & Movement Reminders (9:00 AM to 6:00 PM)
     if (prefs.stepRemindersEnabled) {
-      for (let hour = prefs.stepStartHour; hour <= prefs.stepEndHour; hour++) {
+      const startHour = prefs.stepStartHour ?? 9; // 9 AM
+      const endHour = prefs.stepEndHour ?? 18;   // 6 PM
+      for (let hour = startHour; hour < endHour; hour++) {
         await Notifications.scheduleNotificationAsync({
           content: {
             title: '🚶 Movement Break',
@@ -143,7 +150,7 @@ export async function syncAllNotifications(
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DAILY,
             hour,
-            minute: 50, // Remind at :50 of each hour
+            minute: 50, // Remind at :50 of each hour (9:50 AM ... 5:50 PM)
             channelId: 'lifestyle-reminders',
           },
         });

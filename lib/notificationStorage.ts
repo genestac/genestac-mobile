@@ -2,7 +2,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface NotificationPreferences {
   waterRemindersEnabled: boolean;
-  waterIntervalHours: number; // e.g. 2 hours
+  waterIntervalHours: number; // e.g. 1 hour
+  waterStartHour: number; // e.g. 7 (7 AM)
+  waterEndHour: number; // e.g. 22 (10 PM)
   
   stepRemindersEnabled: boolean;
   stepStartHour: number; // e.g. 9 (9 AM)
@@ -20,6 +22,8 @@ export interface NotificationPreferences {
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   waterRemindersEnabled: true,
   waterIntervalHours: 1,
+  waterStartHour: 7, // 7 AM
+  waterEndHour: 22, // 10 PM
   
   stepRemindersEnabled: true,
   stepStartHour: 9,

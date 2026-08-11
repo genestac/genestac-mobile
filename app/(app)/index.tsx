@@ -770,6 +770,32 @@ export default function DashboardScreen() {
             </View>
           </View>
 
+          {/* Games & Learning Arcade Banner Card */}
+          <TouchableOpacity
+            style={[styles.achievementsBox, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}
+            onPress={() => router.push('/games')}
+            activeOpacity={0.9}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#DCFCE7', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="game-controller" size={22} color="#166534" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.achievementsTitle, { color: '#14532D', fontSize: 16 }]}>
+                    Play & Learn Arcade 🎮
+                  </Text>
+                  <Text style={{ fontSize: 12, color: '#166534', marginTop: 2 }}>
+                    6 funny mini-games: Swipe Junk, DNA Repair, Hanger Games & more!
+                  </Text>
+                </View>
+              </View>
+              <View style={{ backgroundColor: '#166534', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 }}>
+                <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '800' }}>PLAY</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+
           {/* Achievements Section */}
           <AchievementsSection lostKg={lost} />
 

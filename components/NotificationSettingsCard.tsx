@@ -94,7 +94,7 @@ export function NotificationSettingsCard() {
             <Text style={styles.itemTitle}>Hydration Reminders</Text>
           </View>
           <Text style={styles.itemDesc}>
-            Reminder to drink water every {prefs.waterIntervalHours} {prefs.waterIntervalHours==1?"hour":"hours"}
+            Hourly reminders from 7:00 AM to 10:00 PM
           </Text>
         </View>
         <Switch

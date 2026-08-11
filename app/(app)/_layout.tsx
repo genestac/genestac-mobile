@@ -96,7 +96,7 @@ export default function AppLayout() {
         name="diet"
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon name="nutrition" focused={focused} label="Diet" />
+            <TabIcon name="restaurant" focused={focused} label="Diet" />
           ),
         }}
       />
@@ -132,8 +132,12 @@ export default function AppLayout() {
           ),
         }}
       />
-
-      
+      <Tabs.Screen
+        name="badges"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }

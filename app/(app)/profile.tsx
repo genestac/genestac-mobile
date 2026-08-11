@@ -17,8 +17,10 @@ import { router } from "expo-router";
 import Svg, { Path } from "react-native-svg";
 import { supabase } from "@/lib/supabase";
 import { safeWebBrowser, makeRedirectUri } from "@/lib/webBrowser";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Colors, Fonts, Spacing, Radius } from "@/constants/colors";
 import { NotificationSettingsCard } from "@/components/NotificationSettingsCard";
+import { PricingModal } from "@/components/PricingModal";
 
 const SETTINGS = [
   { key: "name", icon: "person-outline", label: "Full Name" },
@@ -32,6 +34,10 @@ export default function ProfileScreen() {
   const [editField, setEditField] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Subscription modal & state
+  const [showPricingModal, setShowPricingModal] = useState(false);
+  const [isProUser, setIsProUser] = useState(false);
 
   // Change password
   const [showPwModal, setShowPwModal] = useState(false);
@@ -59,9 +65,32 @@ export default function ProfileScreen() {
       setUser(session.user);
       const { data } = await supabase
         .from("users")
-        .select("name, email, phone")
+        .select("name, email, phone, metadata, interested_plan_id")
         .eq("id", session.user.id)
         .maybeSingle();
+
+      // Verify Pro status against Supabase database (source of truth)
+      let isPro = false;
+      const meta = data?.metadata;
+      if (meta && typeof meta === "object" && meta.is_pro === true) {
+        if (meta.pro_expires_at) {
+          const expires = new Date(meta.pro_expires_at).getTime();
+          if (expires > Date.now()) {
+            isPro = true;
+          }
+        } else {
+          isPro = true;
+        }
+      }
+
+      if (isPro) {
+        await AsyncStorage.setItem("@genestac_is_pro", "true");
+        setIsProUser(true);
+      } else {
+        await AsyncStorage.removeItem("@genestac_is_pro");
+        setIsProUser(false);
+      }
+
       setProfile(data);
       setLoading(false);
     };
@@ -207,7 +236,15 @@ export default function ProfileScreen() {
           <View style={s.avatarCircle}>
             <Text style={s.avatarText}>{initials}</Text>
           </View>
-          <Text style={s.displayName}>{name}</Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Text style={s.displayName}>{name}</Text>
+            {isProUser && (
+              <View style={s.proBadgeHeader}>
+                <Ionicons name="sparkles" size={12} color="#f59e0b" />
+                <Text style={s.proBadgeHeaderText}>PRO</Text>
+              </View>
+            )}
+          </View>
           <Text style={s.displayEmail}>{email}</Text>
           <View style={s.idBadge}>
             <Text style={s.idText}>ID: {userId}</Text>
@@ -255,6 +292,44 @@ export default function ProfileScreen() {
               color={Colors.textLight}
             />
           </View>
+        </View>
+
+        {/* Membership & Subscriptions Section */}
+        <View style={s.sectionCard}>
+          <Text style={s.sectionTitle}>Membership & Subscription</Text>
+          <TouchableOpacity
+            style={s.fieldRow}
+            onPress={() => setShowPricingModal(true)}
+            activeOpacity={0.8}
+          >
+            <View style={s.proIconContainer}>
+              <Ionicons name="sparkles" size={18} color="#f59e0b" />
+            </View>
+            <View style={s.fieldInfo}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Text style={s.fieldLabel}>Genestac Pro Membership</Text>
+                {isProUser ? (
+                  <View style={s.proBadgeActive}>
+                    <Text style={s.proBadgeActiveText}>ACTIVE</Text>
+                  </View>
+                ) : (
+                  <View style={s.proBadgeUpgrade}>
+                    <Text style={s.proBadgeUpgradeText}>SAVE 50%</Text>
+                  </View>
+                )}
+              </View>
+              <Text style={s.fieldValue}>
+                {isProUser
+                  ? "You have full VIP access to analytics & games"
+                  : "Unlock analytics, games, badges & unlimited access"}
+              </Text>
+            </View>
+            <Ionicons
+              name="chevron-forward"
+              size={16}
+              color={Colors.textLight}
+            />
+          </TouchableOpacity>
         </View>
 
         {/* Lifestyle & Habit Notifications */}
@@ -475,11 +550,64 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Pricing / Subscriptions Modal */}
+      <PricingModal
+        visible={showPricingModal}
+        onClose={() => setShowPricingModal(false)}
+        onSubscribeSuccess={() => setIsProUser(true)}
+      />
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
+  proBadgeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "rgba(245, 158, 11, 0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.3)",
+  },
+  proBadgeHeaderText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: "#d97706",
+  },
+  proIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: Radius.sm,
+    backgroundColor: "rgba(245, 158, 11, 0.12)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  proBadgeUpgrade: {
+    backgroundColor: "#f59e0b",
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: Radius.full,
+  },
+  proBadgeUpgradeText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Colors.white,
+  },
+  proBadgeActive: {
+    backgroundColor: Colors.primaryLight,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: Radius.full,
+  },
+  proBadgeActiveText: {
+    fontSize: 9,
+    fontWeight: "800",
+    color: Colors.white,
+  },
   flex: { flex: 1, backgroundColor: Colors.background },
   center: {
     flex: 1,

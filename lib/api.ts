@@ -330,17 +330,22 @@ export async function uploadToCloudinary(imageUri: string): Promise<string> {
   const cloudName =
     process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME ||
     process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ||
-    "dzq7wi93y";
+    "";
   const apiKey =
     process.env.EXPO_PUBLIC_CLOUDINARY_API_KEY ||
     process.env.CLOUDINARY_API_KEY ||
-    "341487361814837";
+    "";
   const apiSecret =
     process.env.EXPO_PUBLIC_CLOUDINARY_API_SECRET ||
     process.env.CLOUDINARY_API_SECRET ||
-    "QkbFWp23L5m_rMoGeXTgYlJych4";
+    "";
 
   if (!imageUri || imageUri.startsWith("http://") || imageUri.startsWith("https://")) {
+    return imageUri;
+  }
+
+  if (!cloudName || !apiKey || !apiSecret) {
+    console.warn("Cloudinary credentials not configured in environment.");
     return imageUri;
   }
 
@@ -493,6 +498,16 @@ export async function fetchUserReferralSummary(userId: string): Promise<Referral
       console.error('Error fetching user referral profile:', userErr);
     }
 
+    let referralCode = userData?.referral_code || '';
+    if (!referralCode) {
+      // Auto-generate a unique 6-char code if user doesn't have one yet
+      referralCode = 'GEN' + Math.random().toString(36).substring(2, 8).toUpperCase();
+      await supabase
+        .from('users')
+        .update({ referral_code: referralCode })
+        .eq('id', userId);
+    }
+
     // 2. Fetch referrals where this user is the referrer
     const { data: referralsData, error: referralsErr } = await supabase
       .from('referrals')
@@ -526,7 +541,7 @@ export async function fetchUserReferralSummary(userId: string): Promise<Referral
     const qualifiedCount = referralsList.filter(r => r.status === 'QUALIFIED' || r.status === 'REWARDED').length;
 
     return {
-      referralCode: userData?.referral_code || '',
+      referralCode,
       walletBalance: Number(userData?.wallet_balance || 0),
       totalEarned: Number(userData?.total_earned || 0),
       totalReferralsCount: userData?.total_referrals_count ?? referralsList.length,
@@ -538,6 +553,72 @@ export async function fetchUserReferralSummary(userId: string): Promise<Referral
   } catch (err) {
     console.error('Failed to fetch referral summary:', err);
     return null;
+  }
+}
+
+/**
+ * Qualify & process reward for a pending referral when referee purchases a plan or completes onboarding
+ */
+export async function processReferralReward(refereeUserId: string, rewardAmount: number = 250): Promise<boolean> {
+  try {
+    const { data: refRecord, error: refErr } = await supabase
+      .from('referrals')
+      .select('*')
+      .eq('referee_id', refereeUserId)
+      .eq('status', 'PENDING')
+      .maybeSingle();
+
+    if (refErr || !refRecord) {
+      return false;
+    }
+
+    const referrerId = refRecord.referrer_id;
+
+    await supabase
+      .from('referrals')
+      .update({
+        status: 'REWARDED',
+        qualified_at: new Date().toISOString(),
+        rewarded_at: new Date().toISOString(),
+        reward_amount: rewardAmount,
+      })
+      .eq('id', refRecord.id);
+
+    await supabase
+      .from('reward_transactions')
+      .insert({
+        user_id: referrerId,
+        referral_id: refRecord.id,
+        amount: rewardAmount,
+        type: 'CREDIT',
+        source: 'REFERRAL_BONUS',
+        description: 'Referral reward credit for successful signup & plan purchase',
+        status: 'COMPLETED',
+      });
+
+    const { data: referrerUser } = await supabase
+      .from('users')
+      .select('wallet_balance, total_earned, total_referrals_count')
+      .eq('id', referrerId)
+      .maybeSingle();
+
+    const currentBal = Number(referrerUser?.wallet_balance || 0);
+    const currentEarned = Number(referrerUser?.total_earned || 0);
+    const currentCount = Number(referrerUser?.total_referrals_count || 0);
+
+    await supabase
+      .from('users')
+      .update({
+        wallet_balance: currentBal + rewardAmount,
+        total_earned: currentEarned + rewardAmount,
+        total_referrals_count: currentCount + 1,
+      })
+      .eq('id', referrerId);
+
+    return true;
+  } catch (err) {
+    console.error('Error processing referral reward:', err);
+    return false;
   }
 }
 

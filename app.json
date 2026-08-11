@@ -25,7 +25,9 @@
         "backgroundColor": "#FFFFFF"
       },
       "package": "com.genestac.mobile",
-      "permissions": ["ACTIVITY_RECOGNITION"],
+      "permissions": [
+        "ACTIVITY_RECOGNITION"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -34,7 +36,10 @@
               "scheme": "genestac"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -52,7 +57,9 @@
           "icon": "./assets/icon.png",
           "color": "#0B6B54"
         }
-      ]
+      ],
+      "expo-video",
+      "expo-sqlite"
     ],
     "extra": {
       "router": {},

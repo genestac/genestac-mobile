@@ -8,6 +8,7 @@ import {
   Modal,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 
 export interface AchievementBadge {
   id: string;
@@ -231,6 +232,16 @@ export const AchievementsSection: React.FC<AchievementsSectionProps> = ({ lostKg
         })}
       </ScrollView>
 
+      {/* View All Badges & Milestones Button */}
+      <TouchableOpacity
+        style={styles.viewAllBtn}
+        onPress={() => router.push("/(app)/badges")}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.viewAllBtnText}>View All Badges & Achievements</Text>
+        <Ionicons name="arrow-forward" size={14} color="#0B6B54" />
+      </TouchableOpacity>
+
       {/* Badge Detail Modal */}
       {selectedBadge && (
         <Modal
@@ -351,6 +362,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E2E8F0",
     gap: 10,
+  },
+  viewAllBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "rgba(11, 107, 84, 0.08)",
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 2,
+  },
+  viewAllBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0B6B54",
   },
   headerRow: {
     flexDirection: "row",

@@ -57,6 +57,13 @@ export default function ReferralScreen() {
     }
   };
 
+  const handleCopyCode = async () => {
+    if (!summary?.referralCode) return;
+    setCopying(true);
+    Alert.alert('Referral Code Copied', `Your code ${summary.referralCode} is ready to share!`);
+    setTimeout(() => setCopying(false), 1500);
+  };
+
   const formatCurrency = (val: number) => {
     return `₹${val.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
   };
@@ -133,10 +140,11 @@ export default function ReferralScreen() {
             </Text>
 
             <View style={styles.codeBox}>
-              <View style={styles.codeTextGroup}>
+              <TouchableOpacity style={styles.codeTextGroup} onPress={handleCopyCode} activeOpacity={0.7}>
                 <Ionicons name="gift-outline" size={20} color={Colors.primaryLight} />
                 <Text style={styles.codeText}>{summary?.referralCode || 'GENERATING...'}</Text>
-              </View>
+                <Ionicons name={copying ? "checkmark-circle" : "copy-outline"} size={16} color={Colors.primaryLight} />
+              </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.shareButton}

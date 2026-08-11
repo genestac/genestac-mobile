@@ -1,0 +1,13 @@
+{
+  "java.import.gradle.wrapper.enabled": true,
+  "gradle.wrapperScript": "./android/gradlew",
+
+  "java.import.exclusions": [
+    "**/node_modules/**",
+    "**/.metadata/**",
+    "**/archetype-resources/**",
+    "**/META-INF/maven/**"
+  ],
+
+  "java.configuration.updateBuildConfiguration": "disabled"
+}

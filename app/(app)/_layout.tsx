@@ -9,6 +9,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Platform } from 'react-native';
 
 import { syncAllNotifications } from '@/lib/notifications';
+import { registerExpoPushToken } from '@/lib/pushToken';
+
+const CRM_URL = process.env.EXPO_PUBLIC_CRM_API_URL ?? '';
+
+/** Report to backend when user taps a push notification */
+async function trackNotificationOpen(notificationId: string, screen?: string) {
+  if (!notificationId || !CRM_URL) return;
+  try {
+    await fetch(`${CRM_URL}/api/admin/push-notifications/track-open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notification_id: notificationId, screen }),
+    });
+  } catch { }
+}
 
 function TabIcon({ name, focused, label }: { name: any; focused: boolean; label: string }) {
   return (
@@ -44,10 +59,28 @@ export default function AppLayout() {
       } else {
         const { getNotificationPreferences } = require('@/lib/notificationStorage');
         getNotificationPreferences().then(syncAllNotifications).catch(console.error);
+        // Register Expo push token with backend so AI Health Coach can send notifications
+        registerExpoPushToken().catch(console.warn);
       }
       setChecking(false);
     };
     checkAuth();
+
+    // Listen for notification taps → report open event to backend for analytics
+    let notifSub: any = null;
+    try {
+      const Notifications = require('expo-notifications');
+      notifSub = Notifications.addNotificationResponseReceivedListener((response: any) => {
+        const notifData = response?.notification?.request?.content?.data ?? {};
+        const notifId = response?.notification?.request?.identifier;
+        const screen = notifData?.screen;
+        if (notifId) trackNotificationOpen(notifId, screen);
+        // Deep link: navigate to screen if specified
+        if (screen) {
+          try { router.push(`/(app)/${screen}` as any); } catch { }
+        }
+      });
+    } catch { }
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!session) {
@@ -57,7 +90,10 @@ export default function AppLayout() {
       }
     });
 
-    return () => listener.subscription.unsubscribe();
+    return () => {
+      listener.subscription.unsubscribe();
+      notifSub?.remove?.();
+    };
   }, []);
 
   if (checking) return null;
@@ -138,7 +174,7 @@ export default function AppLayout() {
           href: null,
         }}
       />
-      {/* AI Doctor Welcome */}
+      {/* AI Health coach Welcome */}
       <Tabs.Screen
         name="ai-doctor-welcome"
         options={{
@@ -147,9 +183,16 @@ export default function AppLayout() {
           ),
         }}
       />
-      {/* AI Doctor Form (Hidden from Tab Bar) */}
+      {/* AI Health coach Form (Hidden from Tab Bar) */}
       <Tabs.Screen
         name="ai-doctor"
+        options={{
+          href: null,
+        }}
+      />
+      {/* AI Health Coach Chat — Sarvam AI (Hidden from Tab Bar) */}
+      <Tabs.Screen
+        name="ai-doctor-chat"
         options={{
           href: null,
         }}

@@ -1,14 +1,14 @@
 {
   "expo": {
     "name": "Genestac",
-    "slug": "genestac-mobile",
+    "slug": "genestac-app",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icons/icon.webp",
+    "icon": "./assets/icons/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/icons/icon.webp",
+      "image": "./assets/icons/icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#FFFFFF"
     },
@@ -21,7 +21,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icons/icon.webp",
+        "foregroundImage": "./assets/icons/icon.png",
         "backgroundColor": "#FFFFFF"
       },
       "package": "com.genestac.mobile",
@@ -54,7 +54,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/icon.png",
+          "icon": "./assets/icons/icon.png",
           "color": "#0B6B54"
         }
       ],
@@ -64,8 +64,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "8dbf39f4-6b88-41cf-83f2-3ed625f213de"
+        "projectId": "960ae025-5304-423f-b1cd-60f1a9c7a29f"
       }
-    }
+    },
+    "owner": "genestac-therapeutics"
   }
 }

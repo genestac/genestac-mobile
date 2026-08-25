@@ -194,7 +194,7 @@ export default function ProfileScreen() {
             return;
           }
         }
-        
+
         // Fallback to refresh session
         const { data: refreshData } = await supabase.auth.refreshSession();
         if (refreshData?.session?.user) {
@@ -415,17 +415,17 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* AI Doctor CTA */}
+        {/* AI Health coach CTA */}
         <TouchableOpacity
           style={s.aiDoctorBtn}
-          onPress={() => router.push('/(app)/ai-doctor')}
+          onPress={() => router.push('/(app)/ai-doctor-chat')}
           activeOpacity={0.9}
         >
           <View style={s.aiDoctorIconBox}>
             <Ionicons name="medical" size={22} color="#0E7C86" />
           </View>
           <View style={s.aiDoctorContent}>
-            <Text style={s.aiDoctorTitle}>AI Doctor</Text>
+            <Text style={s.aiDoctorTitle}>AI Health coach</Text>
             <Text style={s.aiDoctorSubtitle}>Clinical health assessment · Powered by AI</Text>
           </View>
           <Ionicons name="arrow-forward-circle" size={28} color="#0E7C86" />
@@ -448,7 +448,7 @@ export default function ProfileScreen() {
               >
                 <Image
                   source={require("../../assets/images/brand/logo.webp")}
-                  style={{ width: 70, height: 60, resizeMode: "contain"}}
+                  style={{ width: 70, height: 60, resizeMode: "contain" }}
                 />
               </View>
               <Text style={s.footerDescText}>
@@ -649,7 +649,7 @@ const s = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 12,
     elevation: 8,
-    marginTop:-28
+    marginTop: -28
   },
   avatarText: { fontSize: 32, fontWeight: "800", color: Colors.white },
   displayName: {

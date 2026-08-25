@@ -19,7 +19,7 @@ function TabIcon({ name, focused, label }: { name: any; focused: boolean; label:
         color={focused ? Colors.primaryLight : Colors.textMuted}
       />
       <Text
-        // numberOfLines={1}
+        numberOfLines={1}
         adjustsFontSizeToFit
         style={[styles.tabLabel, focused && styles.tabLabelActive]}
       >
@@ -138,6 +138,22 @@ export default function AppLayout() {
           href: null,
         }}
       />
+      {/* AI Doctor Welcome */}
+      <Tabs.Screen
+        name="ai-doctor-welcome"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="medkit" focused={focused} label="AI Doc" />
+          ),
+        }}
+      />
+      {/* AI Doctor Form (Hidden from Tab Bar) */}
+      <Tabs.Screen
+        name="ai-doctor"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }
@@ -170,7 +186,6 @@ const styles = StyleSheet.create({
     marginTop: 1,
     textAlign: 'center',
     letterSpacing: -0.1,
-    width:200,
   },
   tabLabelActive: {
     color: Colors.primaryLight,

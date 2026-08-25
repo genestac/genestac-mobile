@@ -415,6 +415,22 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* AI Doctor CTA */}
+        <TouchableOpacity
+          style={s.aiDoctorBtn}
+          onPress={() => router.push('/(app)/ai-doctor')}
+          activeOpacity={0.9}
+        >
+          <View style={s.aiDoctorIconBox}>
+            <Ionicons name="medical" size={22} color="#0E7C86" />
+          </View>
+          <View style={s.aiDoctorContent}>
+            <Text style={s.aiDoctorTitle}>AI Doctor</Text>
+            <Text style={s.aiDoctorSubtitle}>Clinical health assessment · Powered by AI</Text>
+          </View>
+          <Ionicons name="arrow-forward-circle" size={28} color="#0E7C86" />
+        </TouchableOpacity>
+
         {/* Sign Out */}
         <TouchableOpacity style={s.signOutBtn} onPress={handleSignOut}>
           <Ionicons name="log-out-outline" size={20} color={Colors.danger} />
@@ -691,6 +707,36 @@ const s = StyleSheet.create({
     color: Colors.textPrimary,
     fontWeight: "600",
     marginTop: 2,
+  },
+  aiDoctorBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    backgroundColor: '#E6F5F7',
+    borderRadius: Radius.lg,
+    padding: Spacing.md,
+    borderWidth: 1.5,
+    borderColor: '#0E7C86',
+  },
+  aiDoctorIconBox: {
+    width: 46,
+    height: 46,
+    borderRadius: 12,
+    backgroundColor: '#CCECF0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiDoctorContent: { flex: 1 },
+  aiDoctorTitle: {
+    fontSize: Fonts.sizes.md,
+    fontWeight: '800',
+    color: '#0B1F3A',
+  },
+  aiDoctorSubtitle: {
+    fontSize: Fonts.sizes.xs,
+    color: '#0E7C86',
+    marginTop: 2,
+    fontWeight: '500',
   },
   signOutBtn: {
     flexDirection: "row",

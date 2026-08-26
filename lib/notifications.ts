@@ -5,6 +5,7 @@ import { NotificationPreferences } from './notificationStorage';
 let NotificationsModule: typeof import('expo-notifications') | null = null;
 let isHandlerSet = false;
 
+
 function getNotificationsModule() {
   if (Platform.OS === 'web') return null;
 
@@ -15,12 +16,36 @@ function getNotificationsModule() {
         NotificationsModule = mod;
         if (!isHandlerSet) {
           mod.setNotificationHandler({
-            handleNotification: async () => ({
-              shouldPlaySound: true,
-              shouldSetBadge: false,
-              shouldShowList: true,
-              shouldShowBanner: true,
-            }),
+            handleNotification: async (notification: any) => {
+              const data = notification?.request?.content?.data ?? {};
+              const imageUrl: string | undefined = data?.image_url;
+
+              // If there's an image, use Notifee to display a BigPicture notification
+              // and suppress the original imageless push banner.
+              if (imageUrl) {
+                try {
+                  const { displayForegroundRichNotification } = require('@/lib/backgroundNotifications');
+                  const handled = await displayForegroundRichNotification(notification);
+                  if (handled) {
+                    return {
+                      shouldPlaySound: false,
+                      shouldSetBadge: false,
+                      shouldShowList: false,
+                      shouldShowBanner: false,
+                    };
+                  }
+                } catch {
+                  // Fall through to standard display
+                }
+              }
+
+              return {
+                shouldPlaySound: true,
+                shouldSetBadge: false,
+                shouldShowList: true,
+                shouldShowBanner: true,
+              };
+            },
           });
           isHandlerSet = true;
         }
@@ -75,6 +100,18 @@ export async function setupNotificationChannels(): Promise<void> {
 
   if (Platform.OS === 'android') {
     try {
+      // ── Channel for CRM push notifications (heads-up alerts) ─────────────
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Genestac Notifications',
+        importance: Notifications.AndroidImportance.MAX,   // MAX = heads-up pop-up
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#4F46E5',
+        sound: 'default',
+        enableVibrate: true,
+        showBadge: true,
+      });
+
+      // ── Channel for local lifestyle/habit reminders ───────────────────────
       await Notifications.setNotificationChannelAsync('lifestyle-reminders', {
         name: 'Lifestyle & Habit Reminders',
         importance: Notifications.AndroidImportance.HIGH,

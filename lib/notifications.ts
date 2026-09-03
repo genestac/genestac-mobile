@@ -1,6 +1,34 @@
 import { Platform } from 'react-native';
 import { NotificationPreferences } from './notificationStorage';
 
+const CRM_API_URL = process.env.EXPO_PUBLIC_CRM_API_URL ?? '';
+
+/**
+ * Fire-and-forget: tell the CRM that the user opened a push notification.
+ * Called from _layout.tsx whenever a notification tap is detected.
+ */
+export async function trackNotificationOpen(params: {
+  notification_id: string;
+  user_id?: string | null;
+  screen?: string | null;
+}): Promise<void> {
+  if (!CRM_API_URL || !params.notification_id) return;
+  try {
+    await fetch(`${CRM_API_URL}/api/admin/push-notifications/track-open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        notification_id: params.notification_id,
+        user_id: params.user_id ?? null,
+        screen: params.screen ?? null,
+      }),
+    });
+  } catch (err) {
+    // Non-critical — swallow silently to avoid disrupting the app
+    console.warn('[Notifications] track-open failed:', err);
+  }
+}
+
 // Lazy reference to expo-notifications module
 let NotificationsModule: typeof import('expo-notifications') | null = null;
 let isHandlerSet = false;

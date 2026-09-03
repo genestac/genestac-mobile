@@ -197,6 +197,57 @@ export async function syncAllNotifications(
       });
     }
 
+    // 6. Schedule Intermittent Fasting Reminders (11:00 AM to 7:00 PM Eating Window, 7:00 PM to 11:00 AM Fasting Window)
+    if (prefs.fastingRemindersEnabled) {
+      const startHour = prefs.fastingStartHour ?? 11; // 11 AM
+      const endHour = prefs.fastingEndHour ?? 19;     // 7 PM
+
+      // Hourly Reminders during Eating Window (11 AM to 7 PM)
+      for (let hour = startHour; hour <= endHour; hour++) {
+        let title = '🍽️ Fasting Window: Eating Time';
+        let body = 'Time to eat a balanced, wholesome meal or healthy snack!';
+        if (hour === 11) {
+          title = '🟢 Eating Window Open (11:00 AM)';
+          body = 'Your eating window is now open! Break your fast with a nutritious meal.';
+        } else if (hour === 19) {
+          title = '🔴 Fasting Window Starting (7:00 PM)';
+          body = 'Last call for food! Your 16-hour fasting window starts at 7:00 PM.';
+        }
+
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title,
+            body,
+            sound: true,
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DAILY,
+            hour,
+            minute: 0,
+            channelId: 'lifestyle-reminders',
+          },
+        });
+      }
+
+      // Fasting Window Reminders (7 PM to 11 AM: Reminders to avoid meals)
+      const fastingCheckHours = [20, 22, 8, 10]; // 8 PM, 10 PM, 8 AM, 10 AM
+      for (const hour of fastingCheckHours) {
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: '🔒 Fasting Window Active (7 PM - 11 AM)',
+            body: 'Fasting period in progress. Avoid meals & calories. Stay hydrated with plain water or black tea/coffee.',
+            sound: true,
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DAILY,
+            hour,
+            minute: 0,
+            channelId: 'lifestyle-reminders',
+          },
+        });
+      }
+    }
+
     console.log('[Notifications] All lifestyle reminders synchronized successfully.');
   } catch (error) {
     console.error('Error synchronizing notifications:', error);

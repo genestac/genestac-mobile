@@ -1,3 +1,4 @@
+import { supabase } from './supabase';
 import { RazorpayPlan } from './razorpay';
 
 interface InvoiceData {
@@ -233,7 +234,7 @@ export async function sendInvoiceEmail(invoice: InvoiceData): Promise<boolean> {
             <div class="benefits">
               <div class="benefits-title">🎉 Your VIP Pro Access Is Unlocked:</div>
               <ul class="benefits-list">
-                <li>Unlimited Hunger Games access (no daily token limits)</li>
+                <li>Unlimited AI logging & health tracking access</li>
                 <li>Deep metabolic & nutrient macro breakdown insights</li>
                 <li>Exclusive Pro badges & community leaderboards</li>
                 <li>Priority support & ad-free experience</li>
@@ -252,11 +253,11 @@ export async function sendInvoiceEmail(invoice: InvoiceData): Promise<boolean> {
   `;
 
   try {
-    const apiKey = process.env.RESEND_API_KEY || '';
-    const resendFrom = process.env.RESEND_FROM || 'Genestac Health <noreply@genestac.com>';
+    const apiKey = process.env.EXPO_PUBLIC_RESEND_API_KEY || process.env.RESEND_API_KEY || '';
+    const resendFrom = process.env.EXPO_PUBLIC_RESEND_FROM || process.env.RESEND_FROM || 'Genestac Health <noreply@genestac.com>';
 
     if (!apiKey) {
-      console.warn('RESEND_API_KEY is not configured in environment.');
+      console.warn('RESEND_API_KEY / EXPO_PUBLIC_RESEND_API_KEY is not configured in environment.');
       return false;
     }
 
@@ -279,11 +280,188 @@ export async function sendInvoiceEmail(invoice: InvoiceData): Promise<boolean> {
       console.log('Invoice email sent via Resend:', data.id);
       return true;
     } else {
-      console.warn('Resend response:', data);
+      console.error('Resend API Error (Email dispatch failed):', res.status, data);
       return false;
     }
   } catch (err) {
     console.error('Error dispatching invoice email:', err);
     return false;
+  }
+}
+
+/**
+ * Generates a 6-digit OTP code, saves it to user metadata in Supabase,
+ * and emails it via Resend API (matching Genestac Web app flow).
+ */
+export async function sendRegistrationOtpEmail(params: {
+  userId: string;
+  userEmail: string;
+  userName?: string;
+}): Promise<{ success: boolean; otp?: string; error?: string }> {
+  try {
+    const { userId, userEmail, userName } = params;
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+    const { data: userRow } = await supabase
+      .from('users')
+      .select('metadata')
+      .eq('id', userId)
+      .maybeSingle();
+
+    const currentMetadata = (userRow?.metadata as Record<string, any>) || {};
+
+    // Save OTP to users table metadata
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({
+        metadata: {
+          ...currentMetadata,
+          otp,
+          otp_expires_at: expiresAt,
+        },
+      })
+      .eq('id', userId);
+
+    if (updateError) {
+      console.error('Failed to store OTP in metadata:', updateError);
+    }
+
+    const apiKey = process.env.EXPO_PUBLIC_RESEND_API_KEY || process.env.RESEND_API_KEY || '';
+    const resendFrom = process.env.EXPO_PUBLIC_RESEND_FROM || process.env.RESEND_FROM || 'Genestac Health <noreply@genestac.com>';
+
+    if (!apiKey) {
+      console.warn('RESEND_API_KEY is not configured in environment. OTP saved in DB only.');
+      return { success: true, otp };
+    }
+
+    const htmlContent = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Verify your Genestac account</title>
+    </head>
+    <body style="margin:0; padding:0; background:#eef4f7; font-family:Arial, Helvetica, sans-serif;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef4f7; padding:40px 16px;">
+        <tr>
+          <td align="center">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px; background:#ffffff; border-radius:22px; overflow:hidden; box-shadow:0 12px 35px rgba(0,31,63,0.12);">
+              <tr>
+                <td style="height:6px; background:linear-gradient(90deg,#001f3f,#10b981);"></td>
+              </tr>
+              <tr>
+                <td style="padding:32px 32px 18px; text-align:center;">
+                  <img src="https://genestac.com/logo2.png" alt="Genestac Therapeutics" width="150" style="display:block; margin:0 auto;" />
+                </td>
+              </tr>
+              <tr>
+                <td style="padding:24px 36px 34px;">
+                  <h1 style="color:#001f3f; font-size:26px; line-height:1.3; margin:0 0 14px; text-align:center;">
+                    Verify your email
+                  </h1>
+                  <p style="font-size:15px; color:#425466; line-height:1.7; margin:0 0 26px; text-align:center;">
+                    Welcome to Genestac${userName ? `, ${userName}` : ''}. Please enter the verification code below to activate your account.
+                  </p>
+                  <div style="background:linear-gradient(135deg,#ecfdf5,#f8fafc); border:1px solid #10b981; border-radius:18px; padding:26px 18px; text-align:center; margin:28px 0;">
+                    <div style="font-size:12px; text-transform:uppercase; letter-spacing:1.6px; color:#10b981; font-weight:700; margin-bottom:10px;">
+                      Verification Code
+                    </div>
+                    <div style="font-size:38px; font-weight:900; letter-spacing:10px; color:#001f3f;">
+                      ${otp}
+                    </div>
+                  </div>
+                  <p style="font-size:14px; color:#000000; line-height:1.6; margin:0 0 10px; text-align:center;">
+                    This code will expire in <strong style="color:#001f3f;">10 minutes</strong>.
+                  </p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+    `;
+
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: resendFrom,
+        to: [userEmail],
+        subject: 'Your Genestac Account Verification Code',
+        html: htmlContent,
+      }),
+    });
+
+    const resData = await res.json();
+    if (res.ok) {
+      console.log('OTP email sent via Resend:', resData.id);
+      return { success: true, otp };
+    } else {
+      console.error('Resend API Error (OTP dispatch failed):', res.status, resData);
+      return { success: false, error: resData.message || 'Failed to dispatch email' };
+    }
+  } catch (err: any) {
+    console.error('sendRegistrationOtpEmail error:', err);
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Verifies custom OTP against user metadata in Supabase
+ */
+export async function verifyRegistrationOtp(params: {
+  userId: string;
+  otp: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { userId, otp } = params;
+    const { data: userRow, error: fetchError } = await supabase
+      .from('users')
+      .select('metadata')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (fetchError || !userRow) {
+      return { success: false, error: 'User record not found.' };
+    }
+
+    const metadata = (userRow.metadata as Record<string, any>) || {};
+
+    if (!metadata.otp || !metadata.otp_expires_at) {
+      return { success: false, error: 'No OTP requested. Please request a new code.' };
+    }
+
+    if (new Date(metadata.otp_expires_at) < new Date()) {
+      return { success: false, error: 'OTP code has expired. Please request a new code.' };
+    }
+
+    if (metadata.otp !== otp.trim()) {
+      return { success: false, error: 'Invalid OTP code. Please check and try again.' };
+    }
+
+    // OTP is valid! Clear OTP fields and mark verified
+    const { otp: _, otp_expires_at: __, ...restMetadata } = metadata;
+    await supabase
+      .from('users')
+      .update({
+        status: 'ACTIVE',
+        metadata: {
+          ...restMetadata,
+          email_verified: true,
+          email_verified_at: new Date().toISOString(),
+        },
+      })
+      .eq('id', userId);
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
   }
 }

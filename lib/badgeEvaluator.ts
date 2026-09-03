@@ -39,11 +39,14 @@ export function evaluateUserBadges(data: any = {}): Badge[] {
   const history = Array.isArray(safeData.history) ? safeData.history : [];
   let lostKg = 0;
   let latestWeightDate = "Today";
-  if (history.length > 0) {
-    const firstWeight = history[0].weight || 85;
-    const lastWeight = history[history.length - 1].weight || firstWeight;
-    lostKg = Math.max(0, parseFloat((firstWeight - lastWeight).toFixed(1)));
-    latestWeightDate = formatDateShort(history[history.length - 1].date);
+  if (history.length >= 2) {
+    const validLogs = history.filter((h: any) => h && typeof h.weight === "number" && h.weight > 0);
+    if (validLogs.length >= 2) {
+      const firstWeight = validLogs[0].weight;
+      const lastWeight = validLogs[validLogs.length - 1].weight;
+      lostKg = Math.max(0, parseFloat((firstWeight - lastWeight).toFixed(1)));
+      latestWeightDate = formatDateShort(validLogs[validLogs.length - 1].date);
+    }
   }
 
   // 2. Calculate Streaks Metric
@@ -51,9 +54,9 @@ export function evaluateUserBadges(data: any = {}): Badge[] {
   const streakDays = habitLogs.length;
 
   // 3. Calculate Water Metric
-  const waterLogs = Array.isArray(safeData.waterLogs) ? safeData.waterLogs : [];
-  const totalWaterLogs = waterLogs.filter((w: any) => w && Number(w.amount) > 0).length;
-  const targetWaterDays = waterLogs.filter((w: any) => w && Number(w.amount) >= 2.5).length;
+  const waterLogs = Array.isArray(safeData.waterLogs) ? safeData.waterLogs : (Array.isArray(safeData.water_history) ? safeData.water_history : []);
+  const totalWaterLogs = waterLogs.filter((w: any) => w && Number(w.amount || w.liters || 0) > 0).length;
+  const targetWaterDays = waterLogs.filter((w: any) => w && Number(w.amount || w.liters || 0) >= 2.5).length;
 
   // 4. Calculate Meals Metric
   const meals = Array.isArray(safeData.meals) ? safeData.meals : [];
@@ -69,12 +72,12 @@ export function evaluateUserBadges(data: any = {}): Badge[] {
   const highProteinDays = meals.filter((m: any) => m && Number(m.protein) >= 25).length;
 
   // 5. Calculate Steps Metric
-  const stepLogs = Array.isArray(safeData.stepLogs) ? safeData.stepLogs : [];
-  const maxDailySteps = Math.max(0, ...stepLogs.map((s: any) => Number(s.steps || 0)));
-  const totalSteps = stepLogs.reduce((acc: number, s: any) => acc + Number(s.steps || 0), 0);
+  const stepLogs = Array.isArray(safeData.stepLogs) ? safeData.stepLogs : (Array.isArray(safeData.steps_history) ? safeData.steps_history : []);
+  const maxDailySteps = Math.max(0, ...stepLogs.map((s: any) => Number(s.steps || s.count || 0)));
+  const totalSteps = stepLogs.reduce((acc: number, s: any) => acc + Number(s.steps || s.count || 0), 0);
 
   // 6. Calculate Sleep Metric
-  const sleepLogs = Array.isArray(safeData.sleepLogs) ? safeData.sleepLogs : [];
+  const sleepLogs = Array.isArray(safeData.sleepLogs) ? safeData.sleepLogs : (Array.isArray(safeData.sleep_history) ? safeData.sleep_history : []);
   const sleepCount = sleepLogs.length;
 
   const badges: Badge[] = [

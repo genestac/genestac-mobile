@@ -23,6 +23,10 @@ import Svg, {
   Rect,
 } from "react-native-svg";
 import { supabase } from "@/lib/supabase";
+import { fetchUserPlans, generateAIUserPlans, updateDoctorReviewStatus } from "@/lib/api";
+import { HealthProfile } from "@/lib/types";
+import { HealthProfileModal } from "@/components/HealthProfileModal";
+import { UnderDoctorReviewCard } from "@/components/UnderDoctorReviewCard";
 import { Colors, Fonts, Spacing, Radius } from "@/constants/colors";
 import { SafeLinearGradient as LinearGradient } from "@/components/ui/SafeLinearGradient";
 
@@ -963,9 +967,17 @@ function MealCardItem({ meal }: { meal: ParsedMeal }) {
 }
 
 export default function DietScreen() {
+
   const [dietPlan, setDietPlan] = useState<any>(null);
+  const [healthProfile, setHealthProfile] = useState<HealthProfile | null>(null);
+  const [doctorReview, setDoctorReview] = useState<boolean | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [approving, setApproving] = useState(false);
   const [error, setError] = useState("");
+
   const today = new Date()
     .toLocaleDateString("en-US", { weekday: "long" })
     .toLowerCase();
@@ -974,31 +986,67 @@ export default function DietScreen() {
 
   const scrollRef = useRef<ScrollView>(null);
 
-  useEffect(() => {
-    const fetchPlan = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.user) {
-        setError("Not logged in");
-        setLoading(false);
-        return;
-      }
-      const { data, error: e } = await supabase
-        .from("user_plans")
-        .select("diet_plan")
-        .eq("user_id", session.user.id)
-        .single();
-
-      if (e || !data?.diet_plan || Object.keys(data.diet_plan).length === 0) {
-        setError("No diet plan assigned yet.");
-      } else {
-        setDietPlan(data.diet_plan);
-      }
+  const fetchPlan = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session?.user) {
+      setError("Not logged in");
       setLoading(false);
-    };
+      return;
+    }
+    setUserId(session.user.id);
+
+    const userPlan = await fetchUserPlans(session.user.id);
+    if (userPlan) {
+      setDietPlan(userPlan.diet_plan || null);
+      setHealthProfile(userPlan.health_profile || null);
+      setDoctorReview(userPlan.doctor_review ?? null);
+
+      if (!userPlan.health_profile || Object.keys(userPlan.health_profile).length === 0) {
+        setShowProfileModal(true);
+      }
+    } else {
+      setShowProfileModal(true);
+    }
+
+    setLoading(false);
+  };
+
+  useEffect(() => {
     fetchPlan();
   }, []);
+
+  const handleProfileSubmit = async (profile: HealthProfile) => {
+    if (!userId) return;
+    setGeneratingPlan(true);
+    try {
+      const generated = await generateAIUserPlans(userId, profile);
+      setHealthProfile(profile);
+      setDoctorReview(false);
+      if (generated?.diet_plan) {
+        setDietPlan(generated.diet_plan);
+      }
+      setShowProfileModal(false);
+    } catch (err) {
+      console.error("Error submitting health profile:", err);
+    } finally {
+      setGeneratingPlan(false);
+    }
+  };
+
+  const handleApproveDemo = async () => {
+    if (!userId) return;
+    setApproving(true);
+    try {
+      await updateDoctorReviewStatus(userId, true);
+      setDoctorReview(true);
+    } catch (err) {
+      console.error("Failed to approve plan:", err);
+    } finally {
+      setApproving(false);
+    }
+  };
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const offsetX = event.nativeEvent.contentOffset.x;
@@ -1016,11 +1064,18 @@ export default function DietScreen() {
     );
   }
 
-  const todayPlan = getDayPlan(dietPlan, selectedDay);
-  const meals = parseMeals(todayPlan);
+  const todayPlan = dietPlan?.[selectedDay] || dietPlan;
+  const meals = Array.isArray(todayPlan) ? todayPlan : [];
 
   return (
     <SafeAreaView style={s.flex} edges={["top", "left", "right"]}>
+      <HealthProfileModal
+        visible={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        onSubmit={handleProfileSubmit}
+        loading={generatingPlan}
+      />
+
       <ScrollView
         style={s.flex}
         contentContainerStyle={s.scrollContent}
@@ -1034,104 +1089,124 @@ export default function DietScreen() {
             </View>
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={s.title}>Diet & Nutrition Plan</Text>
-            <Text style={s.subtitle}>Tailored 4-meal daily wellness guide</Text>
-          </View>
-          {dietPlan && (
-            <View style={s.activePill}>
-              <Text style={s.activePillText}>● Active</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={s.title}>Diet Plan</Text>
+              {doctorReview === true ? (
+                <View style={{ backgroundColor: "#D1FAE5", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                  <Text style={{ fontSize: 10, fontWeight: "700", color: "#059669" }}>DOCTOR APPROVED</Text>
+                </View>
+              ) : (
+                <View style={{ backgroundColor: "#FEF3C7", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                  <Text style={{ fontSize: 10, fontWeight: "700", color: "#D97706" }}>PENDING REVIEW</Text>
+                </View>
+              )}
             </View>
-          )}
+            <Text style={s.subtitle}>
+              {doctorReview === true
+                ? "Custom 7-day meal schedule reviewed by your care team"
+                : "Under doctor review for clinical safety"}
+            </Text>
+          </View>
         </View>
 
-        {/* Day Selector */}
-        {dietPlan && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={s.dayScroll}
-          >
-            {DAYS.map((d) => {
-              const active = selectedDay === d;
-              const isToday = d === today;
-              return (
-                <PressableScale
-                  key={d}
-                  style={[s.dayBtn, active && s.dayBtnActive]}
-                  onPress={() => {
-                    setSelectedDay(d);
-                    setActiveCardIndex(0);
-                    scrollRef.current?.scrollTo({ x: 0, animated: true });
-                  }}
+        {/* If Doctor Review is Pending */}
+        {doctorReview !== true ? (
+          <UnderDoctorReviewCard
+            healthProfile={healthProfile || undefined}
+            onEditProfile={() => setShowProfileModal(true)}
+          />
+        ) : (
+          <>
+            {/* Day Selector */}
+            {dietPlan && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.dayScroll}
+              >
+                {DAYS.map((d) => {
+                  const active = selectedDay === d;
+                  const isToday = d === today;
+                  return (
+                    <PressableScale
+                      key={d}
+                      style={[s.dayBtn, active && s.dayBtnActive]}
+                      onPress={() => {
+                        setSelectedDay(d);
+                        setActiveCardIndex(0);
+                        scrollRef.current?.scrollTo({ x: 0, animated: true });
+                      }}
+                    >
+                      <Text style={[s.dayBtnText, active && s.dayBtnTextActive]}>
+                        {d.slice(0, 3).charAt(0).toUpperCase() + d.slice(1, 3)}
+                      </Text>
+                      {isToday && (
+                        <View
+                          style={[
+                            s.todayDot,
+                            active && { backgroundColor: Colors.white },
+                          ]}
+                        />
+                      )}
+                    </PressableScale>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            {/* Meals Carousel Section */}
+            {error && !dietPlan ? (
+              <View style={s.emptyState}>
+                <View style={s.emptyIconWrap}>
+                  <Ionicons name="leaf-outline" size={40} color={Colors.primary} />
+                </View>
+                <Text style={s.emptyTitle}>No Custom Diet Plan</Text>
+                <Text style={s.emptyText}>{error}</Text>
+              </View>
+            ) : (
+              <View style={s.carouselWrapper}>
+                {/* Horizontal Carousel */}
+                <ScrollView
+                  ref={scrollRef}
+                  horizontal
+                  pagingEnabled={false}
+                  snapToInterval={CARD_WIDTH + CARD_GAP}
+                  snapToAlignment="center"
+                  decelerationRate="fast"
+                  showsHorizontalScrollIndicator={false}
+                  onScroll={handleScroll}
+                  scrollEventThrottle={16}
+                  contentContainerStyle={s.carouselContent}
                 >
-                  <Text style={[s.dayBtnText, active && s.dayBtnTextActive]}>
-                    {d.slice(0, 3).charAt(0).toUpperCase() + d.slice(1, 3)}
-                  </Text>
-                  {isToday && (
-                    <View
+                  {meals.map((meal) => (
+                    <MealCardItem key={meal.id} meal={meal} />
+                  ))}
+                </ScrollView>
+
+                {/* Pagination Dots Indicator */}
+                <View style={s.dotsWrapper}>
+                  {meals.map((m, idx) => (
+                    <PressableScale
+                      key={m.id}
+                      onPress={() => {
+                        setActiveCardIndex(idx);
+                        scrollRef.current?.scrollTo({
+                          x: idx * (CARD_WIDTH + CARD_GAP),
+                          animated: true,
+                        });
+                      }}
                       style={[
-                        s.todayDot,
-                        active && { backgroundColor: Colors.white },
+                        s.dot,
+                        activeCardIndex === idx
+                          ? [s.dotActive, { backgroundColor: m.theme.accentColor }]
+                          : s.dotInactive,
                       ]}
                     />
-                  )}
-                </PressableScale>
-              );
-            })}
-          </ScrollView>
-        )}
-
-        {/* Meals Carousel Section */}
-        {error && !dietPlan ? (
-          <View style={s.emptyState}>
-            <View style={s.emptyIconWrap}>
-              <Ionicons name="leaf-outline" size={40} color={Colors.primary} />
-            </View>
-            <Text style={s.emptyTitle}>No Custom Diet Plan</Text>
-            <Text style={s.emptyText}>{error}</Text>
-          </View>
-        ) : (
-          <View style={s.carouselWrapper}>
-            {/* Horizontal Carousel */}
-            <ScrollView
-              ref={scrollRef}
-              horizontal
-              pagingEnabled={false}
-              snapToInterval={CARD_WIDTH + CARD_GAP}
-              snapToAlignment="center"
-              decelerationRate="fast"
-              showsHorizontalScrollIndicator={false}
-              onScroll={handleScroll}
-              scrollEventThrottle={16}
-              contentContainerStyle={s.carouselContent}
-            >
-              {meals.map((meal) => (
-                <MealCardItem key={meal.id} meal={meal} />
-              ))}
-            </ScrollView>
-
-            {/* Pagination Dots Indicator */}
-            <View style={s.dotsWrapper}>
-              {meals.map((m, idx) => (
-                <PressableScale
-                  key={m.id}
-                  onPress={() => {
-                    setActiveCardIndex(idx);
-                    scrollRef.current?.scrollTo({
-                      x: idx * (CARD_WIDTH + CARD_GAP),
-                      animated: true,
-                    });
-                  }}
-                  style={[
-                    s.dot,
-                    activeCardIndex === idx
-                      ? [s.dotActive, { backgroundColor: m.theme.accentColor }]
-                      : s.dotInactive,
-                  ]}
-                />
-              ))}
-            </View>
-          </View>
+                  ))}
+                </View>
+              </View>
+            )}
+          </>
         )}
 
         <View style={{ height: 28 }} />
@@ -1139,6 +1214,7 @@ export default function DietScreen() {
     </SafeAreaView>
   );
 }
+
 
 const s = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },

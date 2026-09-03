@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { captureRef } from "react-native-view-shot";
-import * as MediaLibrary from "expo-media-library";
+import * as Sharing from "expo-sharing";
 import { router } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { Colors, Fonts, Spacing, Radius } from "@/constants/colors";
@@ -42,18 +42,31 @@ export default function BadgesScreen() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          const { data } = await supabase
-            .from("users")
-            .select("weight_loss_journey")
-            .eq("id", session.user.id)
-            .maybeSingle();
+          const [userRes, plansRes] = await Promise.all([
+            supabase
+              .from("users")
+              .select("weight_loss_journey")
+              .eq("id", session.user.id)
+              .maybeSingle(),
+            supabase
+              .from("user_plans")
+              .select("steps_history, water_history, sleep_history, measurement_history, diet_plan, exercise_plan")
+              .eq("user_id", session.user.id)
+              .maybeSingle()
+          ]);
 
-          if (data?.weight_loss_journey) {
-            const evaluated = evaluateUserBadges(data.weight_loss_journey);
-            setBadges(evaluated);
-          } else {
-            setBadges(evaluateUserBadges({}));
-          }
+          const combinedData = {
+            ...(userRes.data?.weight_loss_journey || {}),
+            steps_history: plansRes.data?.steps_history || [],
+            water_history: plansRes.data?.water_history || [],
+            sleep_history: plansRes.data?.sleep_history || [],
+            measurement_history: plansRes.data?.measurement_history || [],
+            diet_plan: plansRes.data?.diet_plan || {},
+            exercise_plan: plansRes.data?.exercise_plan || {},
+          };
+
+          const evaluated = evaluateUserBadges(combinedData);
+          setBadges(evaluated);
         } else {
           setBadges(evaluateUserBadges({}));
         }
@@ -97,13 +110,6 @@ export default function BadgesScreen() {
     if (isDownloading) return;
     setIsDownloading(true);
     try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== "granted") {
-        Alert.alert("Permission Required", "Please allow gallery access to save the victory card to your photos.");
-        setIsDownloading(false);
-        return;
-      }
-
       if (!cardRef.current) {
         Alert.alert("Error", "Victory card view is not ready yet.");
         setIsDownloading(false);
@@ -116,11 +122,18 @@ export default function BadgesScreen() {
         result: "tmpfile",
       });
 
-      await MediaLibrary.saveToLibraryAsync(uri);
-      Alert.alert("✅ Victory Card Saved!", "The victory card image has been saved to your gallery.");
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "image/png",
+          dialogTitle: "Save or Share Victory Card",
+          UTI: "public.png",
+        });
+      } else {
+        Alert.alert("Sharing Unavailable", "Sharing is not available on this device.");
+      }
     } catch (e: any) {
-      console.error("Error saving card image:", e);
-      Alert.alert("Download Error", "Could not save card to gallery. Please try again.");
+      console.error("Error exporting card image:", e);
+      Alert.alert("Export Error", "Could not export card image. Please try again.");
     } finally {
       setIsDownloading(false);
     }
@@ -353,94 +366,106 @@ export default function BadgesScreen() {
           </ScrollView>
 
           {/* Badges Grid */}
-          <View style={s.badgesGrid}>
-            {filteredBadges.map((badge) => {
-              const isUnlocked = badge.isUnlocked;
-              const progress = Math.min(100, Math.round((badge.currentValue / badge.targetValue) * 100));
+          {filteredBadges.length === 0 ? (
+            <View style={s.emptyFilterBox}>
+              <Ionicons name="trophy-outline" size={38} color="#94A3B8" />
+              <Text style={s.emptyFilterTitle}>No Badges Here Yet</Text>
+              <Text style={s.emptyFilterSub}>
+                {statusFilter === "unlocked"
+                  ? "Log your weight, meals, water, and steps to unlock your very first achievement!"
+                  : "No badges match the selected filter."}
+              </Text>
+            </View>
+          ) : (
+            <View style={s.badgesGrid}>
+              {filteredBadges.map((badge) => {
+                const isUnlocked = badge.isUnlocked;
+                const progress = Math.min(100, Math.round((badge.currentValue / badge.targetValue) * 100));
 
-              return (
-                <TouchableOpacity
-                  key={badge.id}
-                  style={[
-                    s.badgeCard,
-                    isUnlocked
-                      ? { borderColor: badge.borderColor, backgroundColor: badge.badgeBg }
-                      : s.badgeCardLocked,
-                  ]}
-                  onPress={() => setActiveBadge(badge)}
-                  activeOpacity={0.8}
-                >
-                  {/* Prestige Star Badge */}
-                  {prestigeMode && isUnlocked && (
-                    <View style={s.prestigeStarPill}>
-                      <Ionicons name="star" size={10} color="#D97706" />
-                    </View>
-                  )}
-
-                  {/* Tier Pill */}
-                  <View
+                return (
+                  <TouchableOpacity
+                    key={badge.id}
                     style={[
-                      s.tierPill,
-                      isUnlocked ? { backgroundColor: badge.tierBg } : s.tierPillLocked,
+                      s.badgeCard,
+                      isUnlocked
+                        ? { borderColor: badge.borderColor, backgroundColor: badge.badgeBg }
+                        : s.badgeCardLocked,
                     ]}
+                    onPress={() => setActiveBadge(badge)}
+                    activeOpacity={0.8}
                   >
-                    <Text
+                    {/* Prestige Star Badge */}
+                    {prestigeMode && isUnlocked && (
+                      <View style={s.prestigeStarPill}>
+                        <Ionicons name="star" size={10} color="#D97706" />
+                      </View>
+                    )}
+
+                    {/* Tier Pill */}
+                    <View
                       style={[
-                        s.tierPillText,
-                        isUnlocked ? { color: badge.tierTextColor } : s.tierTextLocked,
+                        s.tierPill,
+                        isUnlocked ? { backgroundColor: badge.tierBg } : s.tierPillLocked,
                       ]}
                     >
-                      {isUnlocked ? badge.tierLabel : "Locked"}
-                    </Text>
-                  </View>
-
-                  {/* Badge Icon Container */}
-                  <View
-                    style={[
-                      s.iconWrap,
-                      isUnlocked
-                        ? { backgroundColor: "#FFFFFF", borderColor: badge.borderColor }
-                        : s.iconWrapLocked,
-                    ]}
-                  >
-                    <Ionicons
-                      name={isUnlocked ? badge.iconName : "lock-closed"}
-                      size={26}
-                      color={isUnlocked ? badge.iconColor : "#94A3B8"}
-                    />
-                  </View>
-
-                  {/* Badge Title & Subtitle */}
-                  <Text style={[s.badgeTitle, !isUnlocked && s.textMuted]} numberOfLines={2}>
-                    {badge.title}
-                  </Text>
-                  <Text style={s.badgeSubtitle}>{badge.subtitle}</Text>
-
-                  {/* XP Chip */}
-                  <View style={s.xpTag}>
-                    <Text style={s.xpTagText}>+{badge.xp} XP</Text>
-                  </View>
-
-                  {/* Progress / Status indicator */}
-                  {isUnlocked ? (
-                    <View style={s.unlockedTag}>
-                      <Ionicons name="checkmark-circle" size={12} color="#059669" />
-                      <Text style={s.unlockedTagText}>Unlocked</Text>
-                    </View>
-                  ) : (
-                    <View style={s.miniProgressContainer}>
-                      <View style={s.miniProgressBarBg}>
-                        <View style={[s.miniProgressBarFill, { width: `${progress}%` }]} />
-                      </View>
-                      <Text style={s.miniProgressText}>
-                        {badge.currentValue}/{badge.targetValue} {badge.unit}
+                      <Text
+                        style={[
+                          s.tierPillText,
+                          isUnlocked ? { color: badge.tierTextColor } : s.tierTextLocked,
+                        ]}
+                      >
+                        {isUnlocked ? badge.tierLabel : "Locked"}
                       </Text>
                     </View>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+
+                    {/* Badge Icon Container */}
+                    <View
+                      style={[
+                        s.iconWrap,
+                        isUnlocked
+                          ? { backgroundColor: "#FFFFFF", borderColor: badge.borderColor }
+                          : s.iconWrapLocked,
+                      ]}
+                    >
+                      <Ionicons
+                        name={isUnlocked ? badge.iconName : "lock-closed"}
+                        size={26}
+                        color={isUnlocked ? badge.iconColor : "#94A3B8"}
+                      />
+                    </View>
+
+                    {/* Badge Title & Subtitle */}
+                    <Text style={[s.badgeTitle, !isUnlocked && s.textMuted]} numberOfLines={2}>
+                      {badge.title}
+                    </Text>
+                    <Text style={s.badgeSubtitle}>{badge.subtitle}</Text>
+
+                    {/* XP Chip */}
+                    <View style={s.xpTag}>
+                      <Text style={s.xpTagText}>+{badge.xp} XP</Text>
+                    </View>
+
+                    {/* Progress / Status indicator */}
+                    {isUnlocked ? (
+                      <View style={s.unlockedTag}>
+                        <Ionicons name="checkmark-circle" size={12} color="#059669" />
+                        <Text style={s.unlockedTagText}>Unlocked</Text>
+                      </View>
+                    ) : (
+                      <View style={s.miniProgressContainer}>
+                        <View style={s.miniProgressBarBg}>
+                          <View style={[s.miniProgressBarFill, { width: `${progress}%` }]} />
+                        </View>
+                        <Text style={s.miniProgressText}>
+                          {badge.currentValue}/{badge.targetValue} {badge.unit}
+                        </Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
 
           <View style={{ height: 40 }} />
         </ScrollView>
@@ -498,7 +523,7 @@ export default function BadgesScreen() {
               <View style={s.graphicTopBar}>
                 <View style={s.appLogoBadge}>
                   <Image
-                    source={require("@/assets/images/brand/logo.webp")}
+                    source={require("@/assets/images/brand/logo.png")}
                     style={s.graphicBrandLogo}
                     resizeMode="contain"
                   />
@@ -1694,5 +1719,28 @@ const s = StyleSheet.create({
     fontSize: Fonts.sizes.sm,
     fontWeight: "800",
     color: Colors.white,
+  },
+  emptyFilterBox: {
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Colors.white,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    gap: 8,
+    marginVertical: 8,
+  },
+  emptyFilterTitle: {
+    fontSize: Fonts.sizes.md,
+    fontWeight: "700",
+    color: Colors.textPrimary,
+  },
+  emptyFilterSub: {
+    fontSize: Fonts.sizes.xs,
+    color: Colors.textMuted,
+    textAlign: "center",
+    lineHeight: 18,
   },
 });

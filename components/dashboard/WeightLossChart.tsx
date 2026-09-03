@@ -54,7 +54,7 @@ export const WeightLossChart: React.FC<WeightLossChartProps> = ({
         </View>
       </View>
 
-      {chartData && chartData.length > 0 ? (
+      {chartData && chartData.length >= 2 ? (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -129,6 +129,11 @@ export const WeightLossChart: React.FC<WeightLossChartProps> = ({
             withOuterLines={false}
           />
         </ScrollView>
+      ) : chartData && chartData.length === 1 ? (
+        <View style={styles.emptyChartBox}>
+          <Text style={styles.emptyChartTitle}>Initial Weight Logged ({chartData[0].weight} kg)</Text>
+          <Text style={styles.emptyChartSub}>Log your weight again after a few days to see your progress graph!</Text>
+        </View>
       ) : (
         <View style={styles.emptyChartBox}>
           <Text style={styles.emptyChartTitle}>No Weight Logs Yet</Text>

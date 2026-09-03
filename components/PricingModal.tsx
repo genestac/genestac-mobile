@@ -14,13 +14,16 @@ import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Colors, Fonts, Spacing, Radius } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
-import { RazorpayCheckoutModal } from "@/components/RazorpayCheckoutModal";
+import RazorpayCheckout from "react-native-razorpay";
 import {
   createRazorpayOrder,
   recordSuccessfulPayment,
-  RAZORPAY_PLANS,
+  fetchMobilePlans,
+  RAZORPAY_KEY_ID,
   RazorpayPlan,
 } from "@/lib/razorpay";
+import { TermsModal } from "@/components/TermsModal";
+import { PrivacyPolicyModal } from "@/components/PrivacyPolicyModal";
 
 interface PricingModalProps {
   visible: boolean;
@@ -28,28 +31,26 @@ interface PricingModalProps {
   onSubscribeSuccess?: () => void;
 }
 
-type PlanType = "annual" | "sixMonth" | "monthly";
-
 const PRO_FEATURES = [
   {
-    icon: "game-controller-outline",
-    title: "Unlimited Hunger Games Access",
-    desc: "No daily token limits or wait times to play.",
+    icon: "scale-outline",
+    title: "Weight Loss & Diet Plans",
+    desc: "Personalized meal plans, calorie tracking, and weight loss progress.",
   },
   {
-    icon: "analytics-outline",
-    title: "Deep Metabolic & Nutrient Insights",
-    desc: "Complete macro breakdowns, weekly trends & PDF exports.",
+    icon: "fitness-outline",
+    title: "Steps & Exercise Plans",
+    desc: "Daily step counter, workout routines, and active burn goals.",
   },
   {
-    icon: "trophy-outline",
-    title: "Exclusive Pro Badges & Leaderboards",
-    desc: "Stand out with VIP badges and high-tier challenges.",
+    icon: "water-outline",
+    title: "Water & Hydration Tracking",
+    desc: "Daily intake targets, water loggers, and hydration progress.",
   },
   {
-    icon: "flash-outline",
-    title: "Priority Support & Ad-Free",
-    desc: "Fast-track support and uninterrupted experience.",
+    icon: "moon-outline",
+    title: "Sleep & Recovery Tracking",
+    desc: "Track sleep duration, rest quality, and recovery insights.",
   },
 ];
 
@@ -58,13 +59,12 @@ export const PricingModal: React.FC<PricingModalProps> = ({
   onClose,
   onSubscribeSuccess,
 }) => {
-  const [selectedPlan, setSelectedPlan] = useState<PlanType>("annual");
+  const [selectedPlan, setSelectedPlan] = useState<string>("autopay");
+  const [plansMap, setPlansMap] = useState<Record<string, RazorpayPlan>>({});
+  const [loadingPlans, setLoadingPlans] = useState(true);
   const [subscribing, setSubscribing] = useState(false);
-  const [checkoutVisible, setCheckoutVisible] = useState(false);
-  const [razorpayOrder, setRazorpayOrder] = useState<{
-    orderId: string;
-    plan: RazorpayPlan;
-  } | null>(null);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [userInfo, setUserInfo] = useState<{
     id: string;
     name: string;
@@ -96,45 +96,81 @@ export const PricingModal: React.FC<PricingModalProps> = ({
         console.error("Error fetching user profile for checkout:", e);
       }
     };
+
+    const loadPlans = async () => {
+      setLoadingPlans(true);
+      const plans = await fetchMobilePlans();
+      setPlansMap(plans);
+      // Ensure selected plan is available
+      if (plans["autopay"]) setSelectedPlan("autopay");
+      else if (Object.keys(plans).length > 0)
+        setSelectedPlan(Object.keys(plans)[0]);
+      setLoadingPlans(false);
+    };
+
     if (visible) {
       fetchUser();
+      loadPlans();
     }
   }, [visible]);
 
   const handleSubscribe = async () => {
     setSubscribing(true);
     try {
-      const plan = RAZORPAY_PLANS[selectedPlan] || RAZORPAY_PLANS.annual;
-      const order = await createRazorpayOrder(plan, userInfo.id);
-      if (!order) {
-        Alert.alert("Payment Error", "Failed to initialize payment order. Please try again.");
+      const plan = plansMap[selectedPlan];
+      if (!plan) {
+        Alert.alert("Error", "Selected plan not found. Please try again.");
         setSubscribing(false);
         return;
       }
-      setRazorpayOrder({ orderId: order.orderId, plan });
-      setSubscribing(false);
-      setCheckoutVisible(true);
-    } catch (err: any) {
-      setSubscribing(false);
-      Alert.alert("Error", err.message || "Failed to process payment.");
-    }
-  };
+      const order = await createRazorpayOrder(plan, userInfo.id);
+      if (!order) {
+        Alert.alert(
+          "Payment Error",
+          "Failed to initialize payment. Please try again.",
+        );
+        setSubscribing(false);
+        return;
+      }
 
-  const handlePaymentSuccess = async (data: {
-    razorpay_payment_id: string;
-    razorpay_order_id: string;
-    razorpay_signature?: string;
-  }) => {
-    setCheckoutVisible(false);
-    if (!razorpayOrder) return;
-    setSubscribing(true);
-    try {
+      // Build native Razorpay options
+      const isSubscription = order.orderId.startsWith("sub_");
+      const options: any = {
+        key: RAZORPAY_KEY_ID,
+        name: "Genestac Health",
+        description: plan.title,
+        prefill: {
+          name: userInfo.name || "Patient",
+          email: userInfo.email || "",
+          contact: userInfo.phone || "",
+        },
+        theme: { color: "#12879a" },
+      };
+
+      if (isSubscription) {
+        options.subscription_id = order.orderId;
+      } else {
+        options.order_id = order.orderId;
+        options.amount = String(order.amountPaise);
+        options.currency = "INR";
+      }
+
+      setSubscribing(false);
+
+      // Open native Razorpay checkout
+      const paymentData = await RazorpayCheckout.open(options);
+
+      // Payment succeeded
+      setSubscribing(true);
       await recordSuccessfulPayment({
         userId: userInfo.id,
-        plan: razorpayOrder.plan,
-        orderId: data.razorpay_order_id || razorpayOrder.orderId,
-        paymentId: data.razorpay_payment_id,
-        signature: data.razorpay_signature,
+        plan,
+        orderId:
+          paymentData.razorpay_order_id ||
+          (paymentData as any).razorpay_subscription_id ||
+          order.orderId,
+        paymentId: paymentData.razorpay_payment_id,
+        signature: paymentData.razorpay_signature,
         userName: userInfo.name,
         userEmail: userInfo.email,
         userPhone: userInfo.phone,
@@ -143,7 +179,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
       setSubscribing(false);
       Alert.alert(
         "🎉 Welcome to Genestac Pro!",
-        `Your ${razorpayOrder.plan.title} is active! All VIP features & analytics are unlocked.`,
+        `Your ${plan.title} is active! All VIP features & analytics are unlocked.`,
         [
           {
             text: "Awesome!",
@@ -152,19 +188,18 @@ export const PricingModal: React.FC<PricingModalProps> = ({
               onClose();
             },
           },
-        ]
+        ],
       );
     } catch (err: any) {
       setSubscribing(false);
-      Alert.alert("Notice", "Payment recorded successfully. Pro features are enabled.");
-      onSubscribeSuccess?.();
-      onClose();
+      // err.code === 'PAYMENT_CANCELLED' means user dismissed the sheet
+      if (err?.code !== "PAYMENT_CANCELLED") {
+        Alert.alert(
+          "Payment Failed",
+          err?.description || err?.message || "Payment could not be completed.",
+        );
+      }
     }
-  };
-
-  const handlePaymentFailure = (error: any) => {
-    setCheckoutVisible(false);
-    Alert.alert("Payment Cancelled", error?.description || "Payment was not completed.");
   };
 
   return (
@@ -174,7 +209,10 @@ export const PricingModal: React.FC<PricingModalProps> = ({
       transparent={false}
       onRequestClose={onClose}
     >
-      <SafeAreaView style={s.container} edges={["top", "bottom", "left", "right"]}>
+      <SafeAreaView
+        style={s.container}
+        edges={["top", "bottom", "left", "right"]}
+      >
         {/* Header Bar */}
         <View style={s.headerBar}>
           <TouchableOpacity style={s.closeBtn} onPress={onClose}>
@@ -196,7 +234,8 @@ export const PricingModal: React.FC<PricingModalProps> = ({
             </View>
             <Text style={s.heroTitle}>Unlock Your Full Potential</Text>
             <Text style={s.heroSubtitle}>
-              Supercharge your health journey with advanced analytics, gamification & VIP perks.
+              Supercharge your health journey with advanced analytics,
+              gamification & VIP perks.
             </Text>
           </View>
 
@@ -223,101 +262,88 @@ export const PricingModal: React.FC<PricingModalProps> = ({
           {/* Pricing Options */}
           <Text style={s.sectionHeader}>SELECT YOUR PLAN</Text>
           <View style={s.plansContainer}>
-            {/* Annual Plan (Best Value) */}
-            <TouchableOpacity
-              style={[
-                s.planCard,
-                selectedPlan === "annual" && s.planCardSelected,
-              ]}
-              onPress={() => setSelectedPlan("annual")}
-              activeOpacity={0.88}
-            >
-              <View style={s.badgeRibbon}>
-                <Text style={s.badgeRibbonText}>BEST VALUE · SAVE 50%</Text>
-              </View>
-              <View style={s.planRow}>
-                <View style={s.radioCircle}>
-                  {selectedPlan === "annual" && <View style={s.radioInner} />}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.planName}>Yearly Membership</Text>
-                  <Text style={s.planSubtext}>Full VIP access · Cancel anytime</Text>
-                </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text style={s.planPrice}>$17.99 / ₹1,499</Text>
-                  <Text style={s.planPeriod}>/ year ($1.50 / ₹125 mo)</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
+            {loadingPlans ? (
+              <ActivityIndicator
+                color={Colors.primary}
+                size="large"
+                style={{ marginVertical: 32 }}
+              />
+            ) : (
+              // Order them based on a specific logical array if they exist
+              ["autopay", "annual", "sixMonth", "monthly"]
+                .filter((slug) => plansMap[slug])
+                .map((slug) => {
+                  const plan = plansMap[slug];
+                  const isSelected = selectedPlan === slug;
 
-            {/* 6-Month Plan */}
-            <TouchableOpacity
-              style={[
-                s.planCard,
-                selectedPlan === "sixMonth" && s.planCardSelected,
-              ]}
-              onPress={() => setSelectedPlan("sixMonth")}
-              activeOpacity={0.88}
-            >
-              <View style={[s.badgeRibbon, { backgroundColor: Colors.primaryLight }]}>
-                <Text style={s.badgeRibbonText}>SAVE 40%</Text>
-              </View>
-              <View style={s.planRow}>
-                <View style={s.radioCircle}>
-                  {selectedPlan === "sixMonth" && <View style={s.radioInner} />}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.planName}>6-Month Pass</Text>
-                  <Text style={s.planSubtext}>Billed every 6 months</Text>
-                </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text style={s.planPrice}>$10.99 / ₹899</Text>
-                  <Text style={s.planPeriod}>/ 6 mo ($1.83 / ₹150 mo)</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
-
-            {/* Monthly Plan */}
-            <TouchableOpacity
-              style={[
-                s.planCard,
-                selectedPlan === "monthly" && s.planCardSelected,
-              ]}
-              onPress={() => setSelectedPlan("monthly")}
-              activeOpacity={0.88}
-            >
-              <View style={s.planRow}>
-                <View style={s.radioCircle}>
-                  {selectedPlan === "monthly" && <View style={s.radioInner} />}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.planName}>Monthly Pass</Text>
-                  <Text style={s.planSubtext}>Flexible monthly billing</Text>
-                </View>
-                <View style={{ alignItems: "flex-end" }}>
-                  <Text style={s.planPrice}>$2.49 / ₹199</Text>
-                  <Text style={s.planPeriod}>/ month</Text>
-                </View>
-              </View>
-            </TouchableOpacity>
+                  return (
+                    <TouchableOpacity
+                      key={slug}
+                      style={[s.planCard, isSelected && s.planCardSelected]}
+                      onPress={() => setSelectedPlan(slug)}
+                      activeOpacity={0.88}
+                    >
+                      {plan.badge_text ? (
+                        <View
+                          style={[
+                            s.badgeRibbon,
+                            plan.badge_color
+                              ? { backgroundColor: plan.badge_color }
+                              : {},
+                          ]}
+                        >
+                          <Text style={s.badgeRibbonText}>
+                            {plan.badge_text}
+                          </Text>
+                        </View>
+                      ) : null}
+                      <View style={s.planRow}>
+                        <View style={s.radioCircle}>
+                          {isSelected && <View style={s.radioInner} />}
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={s.planName}>{plan.title}</Text>
+                          <Text style={s.planSubtext}>{plan.description}</Text>
+                        </View>
+                        <View style={{ alignItems: "flex-end" }}>
+                          <Text
+                            style={[
+                              s.planPrice,
+                              plan.badge_color
+                                ? { color: plan.badge_color }
+                                : {},
+                            ]}
+                          >
+                            {plan.term}
+                          </Text>
+                          <Text style={s.planPeriod}>{plan.cadence}</Text>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
+            )}
           </View>
 
           {/* CTA Button */}
           <TouchableOpacity
-            style={[s.subscribeBtn, subscribing && { opacity: 0.75 }]}
+            style={[
+              s.subscribeBtn,
+              (subscribing ||
+                loadingPlans ||
+                Object.keys(plansMap).length === 0) && { opacity: 0.75 },
+            ]}
             onPress={handleSubscribe}
-            disabled={subscribing}
+            disabled={
+              subscribing || loadingPlans || Object.keys(plansMap).length === 0
+            }
             activeOpacity={0.85}
           >
             {subscribing ? (
               <ActivityIndicator color={Colors.white} size="small" />
             ) : (
               <Text style={s.subscribeBtnText}>
-                {selectedPlan === "annual"
-                  ? "Subscribe :  $17.99 / ₹1,499 (yr)"
-                  : selectedPlan === "sixMonth"
-                  ? "Subscribe :  $10.99 / ₹899 (6 mo)"
-                  : "Subscribe :  $2.49 / ₹199 (mo)"}
+                {plansMap[selectedPlan]?.cta || "Subscribe Now"}
               </Text>
             )}
           </TouchableOpacity>
@@ -328,31 +354,38 @@ export const PricingModal: React.FC<PricingModalProps> = ({
 
           {/* Legal / Restore Links */}
           <View style={s.legalRow}>
-            <TouchableOpacity onPress={() => Alert.alert("Restore", "Purchases restored successfully.")}>
-              <Text style={s.legalText}>Restore Purchases</Text>
+            <TouchableOpacity
+              onPress={() => setShowTermsModal(true)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={s.legalText}>Terms & Conditions</Text>
             </TouchableOpacity>
             <Text style={s.dot}>·</Text>
-            <Text style={s.legalText}>Terms of Use</Text>
-            <Text style={s.dot}>·</Text>
-            <Text style={s.legalText}>Privacy Policy</Text>
+            <TouchableOpacity
+              onPress={() => setShowPrivacyModal(true)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={s.legalText}>Privacy Policy</Text>
+            </TouchableOpacity>
           </View>
         </ScrollView>
       </SafeAreaView>
 
-      {/* Razorpay Secure Gateway Checkout */}
-      {razorpayOrder && (
-        <RazorpayCheckoutModal
-          visible={checkoutVisible}
-          orderId={razorpayOrder.orderId}
-          plan={razorpayOrder.plan}
-          userName={userInfo.name}
-          userEmail={userInfo.email}
-          userPhone={userInfo.phone}
-          onClose={() => setCheckoutVisible(false)}
-          onSuccess={handlePaymentSuccess}
-          onFailure={handlePaymentFailure}
-        />
-      )}
+      {/* Terms & Conditions Modal Overlay */}
+      <TermsModal
+        visible={showTermsModal}
+        onClose={() => setShowTermsModal(false)}
+        useNativeModal={false}
+      />
+
+      {/* Privacy Policy Modal Overlay */}
+      <PrivacyPolicyModal
+        visible={showPrivacyModal}
+        onClose={() => setShowPrivacyModal(false)}
+        useNativeModal={false}
+      />
     </Modal>
   );
 };
@@ -466,7 +499,7 @@ const s = StyleSheet.create({
     borderColor: Colors.border,
     padding: Spacing.md,
     position: "relative",
-    marginTop:10
+    marginTop: 10,
   },
   planCardSelected: {
     borderColor: Colors.primaryLight,

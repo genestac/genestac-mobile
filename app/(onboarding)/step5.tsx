@@ -23,7 +23,7 @@ import Animated, {
 
 const { width } = Dimensions.get('window');
 
-const LOGO_ICON = require('@/assets/images/brand/logo.webp');
+const LOGO_ICON = require('@/assets/images/brand/logo.png');
 
 const MIN_W = 30;
 const MAX_W = 120;

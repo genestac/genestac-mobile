@@ -21,6 +21,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Colors, Fonts, Spacing, Radius } from "@/constants/colors";
 import { NotificationSettingsCard } from "@/components/NotificationSettingsCard";
 import { PricingModal } from "@/components/PricingModal";
+import { TermsModal } from "@/components/TermsModal";
+import { PrivacyPolicyModal } from "@/components/PrivacyPolicyModal";
 
 const SETTINGS = [
   { key: "name", icon: "person-outline", label: "Full Name" },
@@ -37,6 +39,8 @@ export default function ProfileScreen() {
 
   // Subscription modal & state
   const [showPricingModal, setShowPricingModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [isProUser, setIsProUser] = useState(false);
 
   // Change password
@@ -169,39 +173,49 @@ export default function ProfileScreen() {
       });
 
       if (error || !data?.url) {
-        Alert.alert("Link Failed", error?.message ?? "Could not start Google link.");
+        Alert.alert(
+          "Link Failed",
+          error?.message ?? "Could not start Google link.",
+        );
         return;
       }
 
-      const result = await safeWebBrowser.openAuthSessionAsync(data.url, redirectUrl);
+      const result = await safeWebBrowser.openAuthSessionAsync(
+        data.url,
+        redirectUrl,
+      );
 
       if (result.type === "success" && result.url) {
         const url = new URL(result.url);
         const params = new URLSearchParams(
-          url.hash ? url.hash.substring(1) : url.search.substring(1)
+          url.hash ? url.hash.substring(1) : url.search.substring(1),
         );
         const accessToken = params.get("access_token");
         const refreshToken = params.get("refresh_token");
 
         if (accessToken && refreshToken) {
-          const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
+          const { data: sessionData, error: sessionError } =
+            await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken,
+            });
           if (!sessionError && sessionData.session?.user) {
             setUser(sessionData.session.user);
             Alert.alert("Success", "Google account connected successfully!");
             return;
           }
         }
-        
+
         // Fallback to refresh session
         const { data: refreshData } = await supabase.auth.refreshSession();
         if (refreshData?.session?.user) {
           setUser(refreshData.session.user);
           Alert.alert("Success", "Google account connected successfully!");
         } else {
-          Alert.alert("Link Complete", "Account linked but couldn't refresh session.");
+          Alert.alert(
+            "Link Complete",
+            "Account linked but couldn't refresh session.",
+          );
         }
       }
     } catch (err: any) {
@@ -222,7 +236,8 @@ export default function ProfileScreen() {
   const email = profile?.email ?? user?.email ?? "";
   const initials = name.slice(0, 2).toUpperCase();
   const userId = user?.id?.slice(0, 8) ?? "";
-  const isGoogleConnected = user?.app_metadata?.providers?.includes("google") ?? false;
+  const isGoogleConnected =
+    user?.app_metadata?.providers?.includes("google") ?? false;
 
   return (
     <SafeAreaView style={s.flex} edges={["top", "left", "right"]}>
@@ -306,7 +321,9 @@ export default function ProfileScreen() {
               <Ionicons name="sparkles" size={18} color="#f59e0b" />
             </View>
             <View style={s.fieldInfo}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+              >
                 <Text style={s.fieldLabel}>Genestac Pro Membership</Text>
                 {isProUser ? (
                   <View style={s.proBadgeActive}>
@@ -320,8 +337,8 @@ export default function ProfileScreen() {
               </View>
               <Text style={s.fieldValue}>
                 {isProUser
-                  ? "You have full VIP access to analytics & games"
-                  : "Unlock analytics, games, badges & unlimited access"}
+                  ? "You have full VIP access to analytics & features"
+                  : "Unlock analytics, badges & unlimited access"}
               </Text>
             </View>
             <Ionicons
@@ -340,7 +357,7 @@ export default function ProfileScreen() {
           <Text style={s.sectionTitle}>Rewards & Referrals</Text>
           <TouchableOpacity
             style={s.fieldRow}
-            onPress={() => router.push('/(app)/referral')}
+            onPress={() => router.push("/(app)/referral")}
           >
             <Ionicons
               name="gift-outline"
@@ -349,7 +366,9 @@ export default function ProfileScreen() {
             />
             <View style={s.fieldInfo}>
               <Text style={s.fieldLabel}>Refer & Earn Rewards</Text>
-              <Text style={s.fieldValue}>Share your code, view wallet balance & ledger</Text>
+              <Text style={s.fieldValue}>
+                Share your code, view wallet balance & ledger
+              </Text>
             </View>
             <Ionicons
               name="chevron-forward"
@@ -401,13 +420,27 @@ export default function ProfileScreen() {
               ) : (
                 <>
                   <Svg width={20} height={20} viewBox="0 0 24 24">
-                    <Path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                    <Path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                    <Path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
-                    <Path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                    <Path
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                      fill="#4285F4"
+                    />
+                    <Path
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                      fill="#34A853"
+                    />
+                    <Path
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
+                      fill="#FBBC05"
+                    />
+                    <Path
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                      fill="#EA4335"
+                    />
                   </Svg>
                   <Text style={s.googleBtnText}>
-                    {isGoogleConnected ? "Connected with Google" : "Connect with Google"}
+                    {isGoogleConnected
+                      ? "Connected with Google"
+                      : "Connect with Google"}
                   </Text>
                 </>
               )}
@@ -421,7 +454,6 @@ export default function ProfileScreen() {
           <Text style={s.signOutText}>Sign Out</Text>
         </TouchableOpacity>
 
-        <Text style={s.version}>Genestac v1.0.0 · Built with ❤️</Text>
 
         {/* Footer Bar */}
         <View style={s.footerContainer}>
@@ -431,8 +463,8 @@ export default function ProfileScreen() {
                 style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
               >
                 <Image
-                  source={require("../../assets/images/brand/logo.webp")}
-                  style={{ width: 70, height: 60, resizeMode: "contain"}}
+                  source={require("../../assets/images/brand/logo.png")}
+                  style={{ width: 70, height: 60, resizeMode: "contain" }}
                 />
               </View>
               <Text style={s.footerDescText}>
@@ -443,10 +475,10 @@ export default function ProfileScreen() {
 
             <View style={{ flex: 1, gap: 4 }}>
               <Text style={s.footerContactText}>✉ info@genestac.com</Text>
-              <Text style={s.footerContactText}>📞 +91 99117 14011</Text>
+              <Text style={s.footerContactText}>📞 +91 9971114121</Text>
               <Text style={s.footerContactText}>
-                📍 A Block, Unitech Business Zone, Sector 50, Gurugram,
-                Haryana 122018
+                📍 A Block, Unitech Business Zone, Sector 50, Gurugram, Haryana
+                122018
               </Text>
             </View>
           </View>
@@ -458,15 +490,38 @@ export default function ProfileScreen() {
               © 2025 GENESTAC. ALL RIGHTS RESERVED.
             </Text>
             <View style={{ flexDirection: "row", gap: 12, flexWrap: "wrap" }}>
-              <Text style={s.footerLegalLink}>Terms & Conditions</Text>
-              <Text style={s.footerLegalLink}>Privacy Policy</Text>
-              <Text style={s.footerLegalLink}>REFUND POLICY</Text>
+              <TouchableOpacity
+                onPress={() => setShowTermsModal(true)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={s.footerLegalLink}>Terms & Conditions</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowPrivacyModal(true)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Text style={s.footerLegalLink}>Privacy Policy</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
 
         <View style={{ height: 24 }} />
       </ScrollView>
+
+      {/* Terms & Conditions Modal */}
+      <TermsModal
+        visible={showTermsModal}
+        onClose={() => setShowTermsModal(false)}
+      />
+
+      {/* Privacy Policy Modal */}
+      <PrivacyPolicyModal
+        visible={showPrivacyModal}
+        onClose={() => setShowPrivacyModal(false)}
+      />
 
       {/* Edit Field Modal */}
       <Modal visible={!!editField} transparent animationType="slide">
@@ -633,7 +688,7 @@ const s = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 12,
     elevation: 8,
-    marginTop:-28
+    marginTop: -28,
   },
   avatarText: { fontSize: 32, fontWeight: "800", color: Colors.white },
   displayName: {
@@ -772,10 +827,14 @@ const s = StyleSheet.create({
     padding: 20,
     gap: 14,
     marginTop: 16,
-    marginBottom: 10,
+    marginBottom: -20,
   },
   footerTopRow: { flexDirection: "column", gap: 20, flexWrap: "wrap" },
-  footerLogoText: { fontSize: 18, fontWeight: "900", color: Colors.textPrimary },
+  footerLogoText: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: Colors.textPrimary,
+  },
   footerDescText: {
     fontSize: 12,
     color: Colors.textSecondary,

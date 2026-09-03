@@ -21,7 +21,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 
-const LOGO_ICON = require('@/assets/images/brand/logo.webp');
+const LOGO_ICON = require('@/assets/images/brand/logo.png');
 
 const MIN_H = 100;
 const MAX_H = 210;

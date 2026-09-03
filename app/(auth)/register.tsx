@@ -26,6 +26,9 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Colors, Fonts, Spacing, Radius } from '@/constants/colors';
 import { linkReferralOnSignup, validateReferralCode } from '@/lib/api';
+import { sendRegistrationOtpEmail, verifyRegistrationOtp } from '@/lib/email';
+import { TermsModal } from '@/components/TermsModal';
+import { PrivacyPolicyModal } from '@/components/PrivacyPolicyModal';
 
 // Required for OAuth redirects on Android
 safeWebBrowser.maybeCompleteAuthSession();
@@ -41,6 +44,8 @@ export default function RegisterScreen() {
   const [referralCode, setReferralCode] = useState('');
   const [showReferral, setShowReferral] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -153,9 +158,16 @@ export default function RegisterScreen() {
         await linkReferralOnSignup(authUserId, referralCode.trim());
       }
 
+      // 4. Send branded verification OTP email via Resend API (matching Genestac web app)
+      await sendRegistrationOtpEmail({
+        userId: authUserId,
+        userEmail: email.trim().toLowerCase(),
+        userName: name.trim(),
+      });
+
       setLoading(false);
 
-      // 4. Show OTP modal
+      // 5. Show OTP modal
       setOtpUserId(authUserId);
       setOtpEmail(email.trim().toLowerCase());
       setOtpPassword(password);
@@ -252,16 +264,27 @@ export default function RegisterScreen() {
       return;
     }
     setVerifyingOtp(true);
-    const { error } = await supabase.auth.verifyOtp({
-      email: otpEmail,
-      token: otp,
-      type: 'signup',
+
+    // 1. Verify against custom Resend OTP in metadata
+    const customVerify = await verifyRegistrationOtp({
+      userId: otpUserId,
+      otp,
     });
-    if (error) {
-      setVerifyingOtp(false);
-      Alert.alert('Verification Failed', error.message);
-      return;
+
+    if (!customVerify.success) {
+      // 2. Fallback to Supabase auth verifyOtp if custom check did not pass
+      const { error } = await supabase.auth.verifyOtp({
+        email: otpEmail,
+        token: otp,
+        type: 'signup',
+      });
+      if (error) {
+        setVerifyingOtp(false);
+        Alert.alert('Verification Failed', customVerify.error || error.message);
+        return;
+      }
     }
+
     // Sign in after verification
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email: otpEmail,
@@ -275,6 +298,19 @@ export default function RegisterScreen() {
       Alert.alert('Signed up!', 'Account verified. Please log in.');
       router.replace('/(auth)/login');
     }
+  };
+
+  const handleResendOtp = async () => {
+    await sendRegistrationOtpEmail({
+      userId: otpUserId,
+      userEmail: otpEmail,
+      userName: name,
+    });
+    await supabase.auth.resend({
+      type: 'signup',
+      email: otpEmail,
+    });
+    Alert.alert('OTP Sent!', `A new verification code has been sent to ${otpEmail}.`);
   };
 
   return (
@@ -296,7 +332,7 @@ export default function RegisterScreen() {
               <Ionicons name="arrow-back" size={22} color="#1f2937" />
             </TouchableOpacity>
             <View style={styles.logoRow}>
-              <Image source={require('@/assets/images/brand/logo.webp')} style={styles.logoIcon} resizeMode="contain" />
+              <Image source={require('@/assets/images/brand/logo.png')} style={styles.logoIcon} resizeMode="contain" />
               <Text style={styles.logoText}>genestac</Text>
             </View>
             <View style={styles.backBtn} />
@@ -395,23 +431,33 @@ export default function RegisterScreen() {
               )}
 
               {/* Terms checkbox */}
-              <TouchableOpacity
-                style={styles.termsRow}
-                onPress={() => { setAcceptedTerms(!acceptedTerms); setErrors((e) => ({ ...e, terms: '' })); }}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>
+              <View style={styles.termsRow}>
+                <TouchableOpacity
+                  onPress={() => { setAcceptedTerms(!acceptedTerms); setErrors((e) => ({ ...e, terms: '' })); }}
+                  activeOpacity={0.8}
+                  style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}
+                >
                   {acceptedTerms && (
                     <Ionicons name="checkmark" size={14} color="#fff" />
                   )}
-                </View>
+                </TouchableOpacity>
                 <Text style={[styles.termsText, errors.terms ? { color: '#ef4444' } : null]}>
                   I agree to the{' '}
-                  <Text style={styles.termsLink}>Terms & Conditions</Text>
+                  <Text
+                    style={styles.termsLink}
+                    onPress={() => setShowTermsModal(true)}
+                  >
+                    Terms & Conditions
+                  </Text>
                   {' '}and{' '}
-                  <Text style={styles.termsLink}>Privacy Policy</Text>
+                  <Text
+                    style={styles.termsLink}
+                    onPress={() => setShowPrivacyModal(true)}
+                  >
+                    Privacy Policy
+                  </Text>
                 </Text>
-              </TouchableOpacity>
+              </View>
               {errors.terms && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <Ionicons name="alert-circle-outline" size={12} color="#ef4444" />
@@ -510,6 +556,15 @@ export default function RegisterScreen() {
             />
 
             <TouchableOpacity
+              style={{ marginTop: 14, paddingVertical: 6 }}
+              onPress={handleResendOtp}
+            >
+              <Text style={{ fontSize: 14, color: Colors.primaryLight, fontWeight: '700' }}>
+                Didn't get a code? Resend OTP
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               style={styles.modalCancel}
               onPress={() => setShowOtp(false)}
             >
@@ -518,6 +573,18 @@ export default function RegisterScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Terms & Conditions Modal */}
+      <TermsModal
+        visible={showTermsModal}
+        onClose={() => setShowTermsModal(false)}
+      />
+
+      {/* Privacy Policy Modal */}
+      <PrivacyPolicyModal
+        visible={showPrivacyModal}
+        onClose={() => setShowPrivacyModal(false)}
+      />
     </SafeAreaView>
   );
 }

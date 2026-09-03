@@ -143,4 +143,65 @@ export type DietPlan = Record<string, DayPlan>;
 
 export type ExercisePlan = Record<string, any>;
 
+export type HealthProfile = {
+  age?: number;
+  gender?: 'Male' | 'Female' | 'Other';
+  heightCm?: number;
+  weightKg?: number;
+  targetWeightKg?: number;
+  primaryGoal?: 'Weight Loss' | 'Muscle Gain' | 'Maintain Weight' | 'Diabetes & Metabolic Health';
+  activityLevel?: 'Sedentary' | 'Lightly Active' | 'Moderately Active' | 'Very Active';
+  dietaryPreference?: 'Vegetarian' | 'Non-Vegetarian' | 'Vegan' | 'Eggetarian';
+  medicalConditions?: string;
+  allergies?: string;
+};
+
+export type UserPlan = {
+  id?: string;
+  user_id: string;
+  diet_plan?: DietPlan;
+  exercise_plan?: ExercisePlan;
+  created_at?: string;
+  updated_at?: string;
+  steps_history?: StepLog[];
+  water_history?: WaterLog[];
+  sleep_history?: SleepLog[];
+  measurement_history?: MeasurementLog[];
+  health_profile?: HealthProfile | Record<string, any>;
+  doctor_review?: boolean | null;
+};
+
+export type FastingProgramPhase = 
+  | 'NOT_STARTED' 
+  | 'FASTING_ACTIVE';
+
+export type FastingProgramState = {
+  phase: FastingProgramPhase;
+  startedAt?: string;
+  fastDurationHours?: number;
+  waterIntakeMl?: number;
+};
+
+export type BloodTestStatus = 'pending' | 'reviewed' | 'dismissed';
+
+export type BloodTestRequest = {
+  id?: string;
+  user_id: string;
+  condition_text: string;
+  status: BloodTestStatus;
+  doctor_notes?: string | null;
+  suggested_tests?: string[] | Record<string, any> | null;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type TestType = {
+  id: string;
+  name: string;
+  category?: string | null;
+  description?: string | null;
+  is_active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
 

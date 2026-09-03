@@ -1,45 +1,72 @@
 import { supabase } from './supabase';
 import { processReferralReward } from './api';
 import { sendInvoiceEmail } from './email';
+import { saveSubscriptionRecord } from './subscriptions';
 
 export interface RazorpayPlan {
-  id: 'annual' | 'sixMonth' | 'monthly';
+  id: string; // Database UUID
+  slug: string; // 'autopay', 'annual', etc.
+
+  // Core properties
   title: string;
   amountRupees: number;
   amountPaise: number;
   days: number;
+
+  // UI properties
+  description: string;
+  term: string;
+  cadence: string;
+  cta: string;
+  badge_text: string | null;
+  badge_color: string | null;
 }
 
-export const RAZORPAY_PLANS: Record<string, RazorpayPlan> = {
-  annual: {
-    id: 'annual',
-    title: 'Yearly Membership',
-    amountRupees: 1499,
-    amountPaise: 149900,
-    days: 365,
-  },
-  sixMonth: {
-    id: 'sixMonth',
-    title: '6-Month Pass',
-    amountRupees: 899,
-    amountPaise: 89900,
-    days: 180,
-  },
-  monthly: {
-    id: 'monthly',
-    title: 'Monthly Pass',
-    amountRupees: 199,
-    amountPaise: 19900,
-    days: 30,
-  },
-};
+export async function fetchMobilePlans(): Promise<Record<string, RazorpayPlan>> {
+  const { data, error } = await supabase
+    .from('plans')
+    .select('*')
+    .eq('is_active', true)
+    .eq('visible_on', 'mobile');
+
+  if (error || !data) {
+    console.error('Failed to fetch mobile plans:', error);
+    return {};
+  }
+
+  const plansMap: Record<string, RazorpayPlan> = {};
+  data.forEach((plan: any) => {
+    // Determine badge color since plans table doesn't have badge_color
+    let badge_color = null;
+    if (plan.cart_name === 'autopay') badge_color = '#10b981'; // Green
+    if (plan.cart_name === 'sixMonth') badge_color = '#818cf8'; // Primary light
+
+    plansMap[plan.cart_name] = {
+      id: plan.id,
+      slug: plan.cart_name,
+      
+      title: plan.name,
+      amountRupees: Number(plan.price),
+      amountPaise: Math.round(Number(plan.price) * 100),
+      days: plan.duration_value || 30, // Fallback to 30 if null
+
+      description: plan.description || '',
+      term: plan.term || '',
+      cadence: plan.cadence || '',
+      cta: plan.cta || '',
+      badge_text: plan.note || null,
+      badge_color,
+    };
+  });
+  return plansMap;
+}
 
 export const RAZORPAY_KEY_ID =
   process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID ||
   process.env.RAZORPAY_KEY_ID ||
   '';
 
-const RAZORPAY_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET || '';
+const RAZORPAY_KEY_SECRET = process.env.EXPO_PUBLIC_RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || '';
 
 /**
  * Create a Razorpay Order via Razorpay Orders API
@@ -52,6 +79,10 @@ export async function createRazorpayOrder(
     if (!RAZORPAY_KEY_ID || !RAZORPAY_KEY_SECRET) {
       console.warn('Razorpay API key or secret not configured in environment.');
       return null;
+    }
+
+    if (plan.slug === 'autopay') {
+      return await createRazorpaySubscription(plan, userId);
     }
 
     const authHeader = 'Basic ' + btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`);
@@ -103,6 +134,94 @@ export async function createRazorpayOrder(
     console.error('Exception creating Razorpay order:', err);
     const fallbackOrderId = `order_${Math.random().toString(36).substring(2, 14)}`;
     return { orderId: fallbackOrderId, amountPaise: plan.amountPaise };
+  }
+}
+
+/**
+ * Create a Razorpay Subscription for AutoPay
+ */
+async function createRazorpaySubscription(
+  plan: RazorpayPlan,
+  userId: string
+): Promise<{ orderId: string; amountPaise: number } | null> {
+  const authHeader = 'Basic ' + btoa(`${RAZORPAY_KEY_ID}:${RAZORPAY_KEY_SECRET}`);
+
+  // Find or Create Plan
+  let rzpPlanId = '';
+  try {
+    const plansRes = await fetch('https://api.razorpay.com/v1/plans', {
+      headers: { Authorization: authHeader }
+    });
+    const plansData = await plansRes.json();
+    const existingPlan = (plansData.items || []).find((p: any) => p.item.name.includes('AutoPay') && p.item.amount === 19900);
+    
+    if (existingPlan) {
+      rzpPlanId = existingPlan.id;
+    } else {
+      const newPlanRes = await fetch('https://api.razorpay.com/v1/plans', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+        body: JSON.stringify({
+          period: 'monthly',
+          interval: 1,
+          item: {
+            name: 'Genestac Pro - AutoPay 199',
+            amount: 19900,
+            currency: 'INR',
+            description: 'Monthly AutoPay subscription'
+          }
+        })
+      });
+      const newPlanData = await newPlanRes.json();
+      rzpPlanId = newPlanData.id;
+    }
+  } catch (err) {
+    console.error('Failed to create/find Razorpay plan:', err);
+    return null;
+  }
+
+  if (!rzpPlanId) return null;
+
+  try {
+    const startAt = Math.floor(Date.now() / 1000) + (plan.days * 24 * 60 * 60);
+    const subRes = await fetch('https://api.razorpay.com/v1/subscriptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: authHeader },
+      body: JSON.stringify({
+        plan_id: rzpPlanId,
+        total_count: 120, // 10 years maximum
+        customer_notify: 0,
+        start_at: startAt,
+        notes: { user_id: userId },
+        addons: [{
+          item: {
+            name: 'Trial Access',
+            amount: plan.amountPaise,
+            currency: 'INR'
+          }
+        }]
+      })
+    });
+    const subData = await subRes.json();
+
+    if (subRes.ok && subData.id) {
+      // Record initial entry as pending using subscription ID
+      await supabase.from('payments').insert({
+        user_id: userId,
+        provider: 'razorpay',
+        provider_order_id: subData.id,
+        amount: plan.amountRupees,
+        status: 'pending',
+      });
+      // Return subscription ID disguised as orderId for frontend consistency
+      return { orderId: subData.id, amountPaise: plan.amountPaise };
+    } else {
+      console.error('Razorpay subscription creation failed:', subData);
+      return null;
+    }
+  } catch (err) {
+    console.error('Exception creating subscription:', err);
+    return null;
   }
 }
 
@@ -177,7 +296,14 @@ export async function recordSuccessfulPayment({
       })
       .eq('id', userId);
 
-    // 3. Also try updating user_memberships if table exists
+    // 3. Save record to public.subscriptions table
+    await saveSubscriptionRecord({
+      userId,
+      planType: plan.slug,
+      durationDays: plan.days,
+    });
+
+    // 4. Also try updating user_memberships if table exists
     try {
       await supabase.from('user_memberships').insert({
         user_id: userId,
@@ -195,7 +321,7 @@ export async function recordSuccessfulPayment({
       // Ignore if user_memberships is not created yet
     }
 
-    // 4. Trigger referral reward processing for referrer!
+    // 5. Trigger referral reward processing for referrer!
     await processReferralReward(userId, 250);
 
     // 5. Send branded Tax Invoice email

@@ -12,8 +12,12 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import YoutubePlayer from 'react-native-youtube-iframe'; // npm install react-native-youtube-iframe (uses your existing react-native-webview under the hood, no native rebuild needed)
+import YoutubePlayer from 'react-native-youtube-iframe';
 import { supabase } from '@/lib/supabase';
+import { fetchUserPlans, generateAIUserPlans, updateDoctorReviewStatus } from '@/lib/api';
+import { HealthProfile } from '@/lib/types';
+import { HealthProfileModal } from '@/components/HealthProfileModal';
+import { UnderDoctorReviewCard } from '@/components/UnderDoctorReviewCard';
 import { Colors, Fonts, Spacing, Radius } from '@/constants/colors';
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
@@ -701,27 +705,78 @@ function ExerciseFormModal({
 }
 
 export default function ExerciseScreen() {
+
   const [exercisePlan, setExercisePlan] = useState<any>(null);
+  const [healthProfile, setHealthProfile] = useState<HealthProfile | null>(null);
+  const [doctorReview, setDoctorReview] = useState<boolean | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [generatingPlan, setGeneratingPlan] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
   const [selectedDay, setSelectedDay] = useState(today);
 
-  useEffect(() => {
-    const fetch = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const { data, error: e } = await supabase.from('user_plans').select('exercise_plan').eq('user_id', session.user.id).single();
-        if (!e && data?.exercise_plan && Object.keys(data.exercise_plan).length > 0) {
-          setExercisePlan(data.exercise_plan);
-          setLoading(false);
-          return;
-        }
-      }
-      setExercisePlan(DEFAULT_EXERCISE_PLAN);
+  const fetchPlan = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      setError("Not logged in");
       setLoading(false);
-    };
-    fetch();
+      return;
+    }
+    setUserId(session.user.id);
+
+    const userPlan = await fetchUserPlans(session.user.id);
+    if (userPlan) {
+      setExercisePlan(userPlan.exercise_plan || null);
+      setHealthProfile(userPlan.health_profile || null);
+      setDoctorReview(userPlan.doctor_review ?? null);
+
+      if (!userPlan.health_profile || Object.keys(userPlan.health_profile).length === 0) {
+        setShowProfileModal(true);
+      }
+    } else {
+      setShowProfileModal(true);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchPlan();
   }, []);
+
+  const handleProfileSubmit = async (profile: HealthProfile) => {
+    if (!userId) return;
+    setGeneratingPlan(true);
+    try {
+      const generated = await generateAIUserPlans(userId, profile);
+      setHealthProfile(profile);
+      setDoctorReview(false);
+      if (generated?.exercise_plan) {
+        setExercisePlan(generated.exercise_plan);
+      }
+      setShowProfileModal(false);
+    } catch (err) {
+      console.error("Error submitting health profile:", err);
+    } finally {
+      setGeneratingPlan(false);
+    }
+  };
+
+  const handleApproveDemo = async () => {
+    if (!userId) return;
+    setApproving(true);
+    try {
+      await updateDoctorReviewStatus(userId, true);
+      setDoctorReview(true);
+    } catch (err) {
+      console.error("Failed to approve plan:", err);
+    } finally {
+      setApproving(false);
+    }
+  };
 
   if (loading) return <SafeAreaView style={s.center} edges={["top", "left", "right"]}><ActivityIndicator color={Colors.primaryLight} size="large" /></SafeAreaView>;
 
@@ -731,85 +786,125 @@ export default function ExerciseScreen() {
 
   return (
     <SafeAreaView style={s.flex} edges={["top", "left", "right"]}>
+      <HealthProfileModal
+        visible={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        onSubmit={handleProfileSubmit}
+        loading={generatingPlan}
+      />
+
       <ScrollView style={s.flex} contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={s.header}>
           <View style={s.headerIcon}><Ionicons name="barbell" size={22} color={Colors.white} /></View>
           <View style={{ flex: 1 }}>
-            <Text style={s.title}>Exercise Plan</Text>
-            <Text style={s.subtitle}>Your weekly workout plan</Text>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+              <Text style={s.title}>Exercise Plan</Text>
+              {doctorReview === true ? (
+                <View style={{ backgroundColor: "#D1FAE5", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                  <Text style={{ fontSize: 10, fontWeight: "700", color: "#059669" }}>DOCTOR APPROVED</Text>
+                </View>
+              ) : (
+                <View style={{ backgroundColor: "#FEF3C7", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                  <Text style={{ fontSize: 10, fontWeight: "700", color: "#D97706" }}>PENDING REVIEW</Text>
+                </View>
+              )}
+            </View>
+            <Text style={s.subtitle}>
+              {doctorReview === true
+                ? "Your weekly workout plan reviewed by care team"
+                : "Under doctor review for medical compliance"}
+            </Text>
           </View>
         </View>
 
-        {/* Day Selector */}
-        {exercisePlan && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.dayScroll}>
-            {DAYS.map(d => {
-              const active = selectedDay === d;
-              return (
-                <TouchableOpacity key={d} style={[s.dayBtn, active && s.dayBtnActive]} onPress={() => setSelectedDay(d)}>
-                  <Text style={[s.dayBtnText, active && s.dayBtnTextActive]}>{d.slice(0, 3).charAt(0).toUpperCase() + d.slice(1, 3)}</Text>
-                  {d === today && <View style={[s.todayDot, active && { backgroundColor: Colors.white }]} />}
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        )}
-
-        {/* Content */}
-        {exercises.length === 0 || selectedDay === 'sunday' ? (
-          <View style={s.emptyState}>
-            <Ionicons name="bed-outline" size={48} color={Colors.textLight} />
-            <Text style={s.emptyTitle}>Rest Day 🛌</Text>
-            <Text style={s.emptyText}>Give your body time to recover. Drink plenty of water and rest well!</Text>
-          </View>
+        {/* Doctor Review Gate */}
+        {doctorReview !== true ? (
+          <UnderDoctorReviewCard
+            healthProfile={healthProfile || undefined}
+            onEditProfile={() => setShowProfileModal(true)}
+          />
         ) : (
-          <View style={s.exerciseList}>
-            <View style={s.dayHeaderRow}>
-              <Text style={s.dayHeader}>{selectedDay.charAt(0).toUpperCase() + selectedDay.slice(1)}'s Workout</Text>
-              {dayType ? (
-                <View style={s.dayTypeBadge}>
-                  <Text style={s.dayTypeText}>{dayType}</Text>
+          <>
+            {/* Day Selector */}
+            {exercisePlan && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.dayScroll}>
+                {DAYS.map(d => {
+                  const active = selectedDay === d;
+                  return (
+                    <TouchableOpacity key={d} style={[s.dayBtn, active && s.dayBtnActive]} onPress={() => setSelectedDay(d)}>
+                      <Text style={[s.dayBtnText, active && s.dayBtnTextActive]}>{d.slice(0, 3).charAt(0).toUpperCase() + d.slice(1, 3)}</Text>
+                      {d === today && <View style={[s.todayDot, active && { backgroundColor: Colors.white }]} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+
+            {/* Content */}
+            {error && !exercisePlan ? (
+              <View style={s.emptyState}>
+                <View style={s.emptyIconWrap}>
+                  <Ionicons name="barbell-outline" size={40} color={Colors.primary} />
                 </View>
-              ) : null}
-            </View>
-
-            {exercises.map((ex, i) => (
-              <View key={ex.id || i} style={s.exerciseCard}>
-                <View style={s.exerciseNum}>
-                  <Text style={s.exerciseNumText}>{i + 1}</Text>
-                </View>
-
-                <View style={s.exerciseInfo}>
-                  <View style={s.titleRow}>
-                    <Text style={s.exerciseName}>{ex.name}</Text>
-                    {ex.category ? (
-                      <View style={s.categoryTag}>
-                        <Text style={s.categoryText}>{ex.category}</Text>
-                      </View>
-                    ) : null}
-                  </View>
-
-                  {ex.setsReps ? (
-                    <View style={s.badgeRow}>
-                      <Ionicons name="repeat-outline" size={14} color={Colors.primaryLight} />
-                      <Text style={s.setsRepsText}>{ex.setsReps}</Text>
-                    </View>
-                  ) : null}
-
-                  {ex.notes ? <Text style={s.notesText}>{ex.notes}</Text> : null}
-
-                  {ex.details && ex.details.length > 0 ? (
-                    <View style={s.detailsBox}>
-                      {ex.details.map((d, idx) => (
-                        <Text key={idx} style={s.detailText}>• {d}</Text>
-                      ))}
-                    </View>
-                  ) : null}
-                </View>
+                <Text style={s.emptyTitle}>No Custom Exercise Plan</Text>
+                <Text style={s.emptyText}>{error}</Text>
               </View>
-            ))}
-          </View>
+            ) : exercises.length === 0 || selectedDay === 'sunday' ? (
+              <View style={s.emptyState}>
+                <Ionicons name="bed-outline" size={48} color={Colors.textLight} />
+                <Text style={s.emptyTitle}>Rest Day 🛌</Text>
+                <Text style={s.emptyText}>Give your body time to recover. Drink plenty of water and rest well!</Text>
+              </View>
+            ) : (
+              <View style={s.exerciseList}>
+                <View style={s.dayHeaderRow}>
+                  <Text style={s.dayHeader}>{selectedDay.charAt(0).toUpperCase() + selectedDay.slice(1)}'s Workout</Text>
+                  {dayType ? (
+                    <View style={s.dayTypeBadge}>
+                      <Text style={s.dayTypeText}>{dayType}</Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                {exercises.map((ex, i) => (
+                  <View key={ex.id || i} style={s.exerciseCard}>
+                    <View style={s.exerciseNum}>
+                      <Text style={s.exerciseNumText}>{i + 1}</Text>
+                    </View>
+
+                    <View style={s.exerciseInfo}>
+                      <View style={s.titleRow}>
+                        <Text style={s.exerciseName}>{ex.name}</Text>
+                        {ex.category ? (
+                          <View style={s.categoryTag}>
+                            <Text style={s.categoryText}>{ex.category}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      {ex.setsReps ? (
+                        <View style={s.badgeRow}>
+                          <Ionicons name="repeat-outline" size={14} color={Colors.primaryLight} />
+                          <Text style={s.setsRepsText}>{ex.setsReps}</Text>
+                        </View>
+                      ) : null}
+
+                      {ex.notes ? <Text style={s.notesText}>{ex.notes}</Text> : null}
+
+                      {ex.details && ex.details.length > 0 ? (
+                        <View style={s.detailsBox}>
+                          {ex.details.map((d, idx) => (
+                            <Text key={idx} style={s.detailText}>• {d}</Text>
+                          ))}
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
         )}
         <View style={{ height: 24 }} />
       </ScrollView>
@@ -817,24 +912,34 @@ export default function ExerciseScreen() {
   );
 }
 
+
 const s = StyleSheet.create({
   flex: { flex: 1, backgroundColor: Colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: Colors.background },
-  scroll: { padding: Spacing.md, gap: 12 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: 2 },
+  scroll: { paddingVertical: Spacing.md, gap: 12 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: 2, paddingHorizontal: Spacing.md },
   headerIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: Colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: Fonts.sizes.lg, fontWeight: '800', color: Colors.textPrimary, letterSpacing: -0.3 },
   subtitle: { fontSize: Fonts.sizes.xs, color: Colors.textMuted },
-  dayScroll: { gap: 6, paddingVertical: 4 },
+  dayScroll: { gap: 6, paddingVertical: 4, paddingHorizontal: Spacing.md },
   dayBtn: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: Radius.full, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', gap: 2 },
   dayBtnActive: { backgroundColor: Colors.primaryLight, borderColor: Colors.primaryLight },
   dayBtnText: { fontSize: Fonts.sizes.xs, fontWeight: '700', color: Colors.textMuted },
   dayBtnTextActive: { color: Colors.white },
   todayDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.primaryLight },
-  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 40, gap: 12 },
+  emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 40, gap: 12, paddingHorizontal: Spacing.md },
+  emptyIconWrap: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: Colors.primaryMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
   emptyTitle: { fontSize: Fonts.sizes.lg, fontWeight: '700', color: Colors.textPrimary },
   emptyText: { fontSize: Fonts.sizes.sm, color: Colors.textMuted, textAlign: 'center', lineHeight: 20 },
-  exerciseList: { gap: 10 },
+  exerciseList: { gap: 10, paddingHorizontal: Spacing.md },
   dayHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 },
   dayHeader: { fontSize: Fonts.sizes.md, fontWeight: '800', color: Colors.textPrimary },
   dayTypeBadge: { backgroundColor: Colors.primaryMuted, paddingHorizontal: 8, paddingVertical: 3, borderRadius: Radius.full },

@@ -19,7 +19,7 @@ import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { Pedometer } from 'expo-sensors';
 import { supabase } from '@/lib/supabase';
-import { fetchUserJourney, saveUserStepLog } from '@/lib/api';
+import { fetchUserJourney, fetchUserPlans, saveUserStepLog } from '@/lib/api';
 import { StepLog, WeightJourney } from '@/lib/types';
 import { Colors, Fonts, Spacing, Radius } from '@/constants/colors';
 
@@ -73,18 +73,22 @@ export default function StepsScreen() {
       }
       setUserId(session.user.id);
 
-      const journey = await fetchUserJourney(session.user.id);
-      if (journey) {
-        if (journey.stepGoal) setStepGoal(journey.stepGoal);
-        if (journey.stepLogs && journey.stepLogs.length > 0) {
-          setHistory(journey.stepLogs);
-          const todayStr = new Date().toISOString().split('T')[0];
-          const todayLog = journey.stepLogs.find(s => s.date.split('T')[0] === todayStr);
-          if (todayLog) {
-            setCurrentSteps(todayLog.steps);
-            baseStepsRef.current = todayLog.steps;
-            lastSyncedStepsRef.current = todayLog.steps;
-          }
+      const [journey, userPlan] = await Promise.all([
+        fetchUserJourney(session.user.id),
+        fetchUserPlans(session.user.id),
+      ]);
+
+      if (journey?.stepGoal) setStepGoal(journey.stepGoal);
+
+      const stepLogs = userPlan?.steps_history || journey?.stepLogs || [];
+      if (stepLogs.length > 0) {
+        setHistory(stepLogs);
+        const todayStr = new Date().toISOString().split('T')[0];
+        const todayLog = stepLogs.find(s => s.date.split('T')[0] === todayStr);
+        if (todayLog) {
+          setCurrentSteps(todayLog.steps);
+          baseStepsRef.current = todayLog.steps;
+          lastSyncedStepsRef.current = todayLog.steps;
         }
       }
     } catch (err) {

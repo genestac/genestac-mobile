@@ -120,7 +120,7 @@ export default function WelcomeScreen() {
 
           {/* Logo */}
           <View style={styles.logoRow}>
-            <Image source={require('@/assets/images/brand/logo.webp')} style={styles.logoIcon} />
+            <Image source={require('@/assets/images/brand/logo.png')} style={styles.logoIcon} />
           </View>
 
           {/* "Welcome to" with dividers */}

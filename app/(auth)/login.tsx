@@ -145,7 +145,7 @@ export default function LoginScreen() {
           <Ionicons name="arrow-back" size={22} color="#1f2937" />
         </TouchableOpacity>
         <View style={styles.logoRow}>
-          <Image source={require('@/assets/images/brand/logo.webp')} style={styles.logoIcon} resizeMode="contain" />
+          <Image source={require('@/assets/images/brand/logo.png')} style={styles.logoIcon} resizeMode="contain" />
           <Text style={styles.logoText}>genestac</Text>
         </View>
         <View style={styles.backBtn} />

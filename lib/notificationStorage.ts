@@ -17,6 +17,10 @@ export interface NotificationPreferences {
   sleepReminderEnabled: boolean;
   sleepReminderHour: number; // e.g. 22 (10 PM)
   sleepReminderMinute: number; // e.g. 30 (10:30 PM)
+
+  fastingRemindersEnabled: boolean;
+  fastingStartHour: number; // 11 (11 AM)
+  fastingEndHour: number;   // 19 (7 PM)
 }
 
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
@@ -36,6 +40,10 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
   sleepReminderEnabled: true,
   sleepReminderHour: 22, // 10 PM
   sleepReminderMinute: 30, // 10:30 PM
+
+  fastingRemindersEnabled: true,
+  fastingStartHour: 11, // 11 AM eating window start
+  fastingEndHour: 19,   // 7 PM eating window end
 };
 
 const STORAGE_KEY = '@genestac_notification_prefs';

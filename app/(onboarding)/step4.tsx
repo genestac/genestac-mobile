@@ -19,7 +19,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Image } from 'react-native';
 
-const LOGO_ICON = require('@/assets/images/brand/logo.webp');
+const LOGO_ICON = require('@/assets/images/brand/logo.png');
 
 const MIN_A = 18;
 const MAX_A = 90;

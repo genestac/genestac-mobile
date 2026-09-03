@@ -44,3 +44,5 @@ yarn-error.*
 
 devlogs.md
 dev.js
+
+*.sql

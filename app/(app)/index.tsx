@@ -31,8 +31,15 @@ import {
   SleepLog,
   MeasurementLog,
   HabitLog,
+  BloodTestRequest,
 } from "@/lib/types";
 import {
+  fetchUserPlans,
+  saveUserWaterHistory,
+  saveUserSleepHistory,
+  saveUserMeasurementHistory,
+  fetchTestRequests,
+  createBloodTestRequest,
   recommendMeals,
   recommendSleep,
   uploadToCloudinary,
@@ -49,10 +56,14 @@ import { SidebarNav } from "@/components/dashboard/SidebarNav";
 import { WaterTrackerWidget } from "@/components/dashboard/WaterTrackerWidget";
 import { SleepTrackerWidget } from "@/components/dashboard/SleepTrackerWidget";
 import { HealthyRecipesWidget } from "@/components/dashboard/HealthyRecipesWidget";
+import { BloodTestWidget } from "@/components/dashboard/BloodTestWidget";
 import { BodyMeasurementsWidget } from "@/components/dashboard/BodyMeasurementsWidget";
 import { HabitsChecklistWidget } from "@/components/dashboard/HabitsChecklistWidget";
 import { HistoryModal, HistoryType } from "@/components/dashboard/HistoryModal";
 import { AchievementsSection } from "@/components/dashboard/AchievementsSection";
+import { FastingWidget } from "@/components/dashboard/FastingWidget";
+import { checkUserSubscription, UserSubscriptionStatus } from "@/lib/subscriptions";
+import { PricingModal } from "@/components/PricingModal";
 
 const DAYS = ["7D", "30D", "90D", "All"];
 
@@ -155,11 +166,6 @@ export default function DashboardScreen() {
 
   const handlePickImage = async () => {
     try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permissionResult.granted) {
-        Alert.alert("Permission required", "Permission to access photo library is required!");
-        return;
-      }
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
@@ -220,12 +226,12 @@ export default function DashboardScreen() {
   const [waterAmount, setWaterAmount] = useState(0.0);
 
   // Sleep tracker state
-  const [sleepHours, setSleepHours] = useState(7.5);
+  const [sleepHours, setSleepHours] = useState(0.0);
 
   // Body measurements state
-  const [waist, setWaist] = useState("34");
-  const [hips, setHips] = useState("40");
-  const [chest, setChest] = useState("38");
+  const [waist, setWaist] = useState("");
+  const [hips, setHips] = useState("");
+  const [chest, setChest] = useState("");
   const [savingMeasurements, setSavingMeasurements] = useState(false);
 
   // Habits state
@@ -235,59 +241,83 @@ export default function DashboardScreen() {
     noSugar: false,
   });
 
+  // Subscription status state
+  const [subStatus, setSubStatus] = useState<UserSubscriptionStatus | null>(null);
+  const [showPricingModal, setShowPricingModal] = useState(false);
+
+  // Blood Test Requests state
+  const [bloodTestRequests, setBloodTestRequests] = useState<BloodTestRequest[]>([]);
+  const [bloodTestLoading, setBloodTestLoading] = useState(false);
+
   const load = useCallback(async () => {
     const {
       data: { session },
     } = await supabase.auth.getSession();
     if (session?.user) {
       setUser(session.user);
-      const { data } = await supabase
-        .from("users")
-        .select("weight_loss_journey")
-        .eq("id", session.user.id)
-        .maybeSingle();
-      if (data?.weight_loss_journey) {
-        const j = data.weight_loss_journey as WeightJourney;
-        const historyList = Array.isArray(j.history) ? j.history : [];
-        const sortedHistory = [...historyList].sort(
-          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-        );
-        setJourney({
-          ...j,
-          history: sortedHistory,
-          targetGoal: j.targetGoal ?? 70,
-        });
-        if (j.targetGoal) setTargetInput(String(j.targetGoal));
+      checkUserSubscription(session.user.id).then(setSubStatus).catch(console.error);
 
-        // Sync water today
-        const today = new Date().toISOString().split("T")[0];
-        const todayWater = j.waterLogs?.find((w) => w.date === today);
-        setWaterAmount(todayWater?.amount ?? 0);
+      const [userRes, planData] = await Promise.all([
+        supabase
+          .from("users")
+          .select("weight_loss_journey")
+          .eq("id", session.user.id)
+          .maybeSingle(),
+        fetchUserPlans(session.user.id),
+      ]);
 
-        // Sync sleep today
-        const todaySleep = j.sleepLogs?.find((s) => s.date === today);
-        if (todaySleep) setSleepHours(todaySleep.hours);
+      const j = (userRes.data?.weight_loss_journey as WeightJourney) || { history: [] };
+      const historyList = Array.isArray(j.history) ? j.history : [];
+      const sortedHistory = [...historyList].sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
+      );
 
-        // Sync latest measurements
-        if (j.measurements && j.measurements.length > 0) {
-          const latestM = j.measurements[j.measurements.length - 1];
-          if (latestM.waist) setWaist(String(latestM.waist));
-          if (latestM.hips) setHips(String(latestM.hips));
-          if (latestM.chest) setChest(String(latestM.chest));
-        }
+      const waterLogs = planData?.water_history || j.waterLogs || [];
+      const sleepLogs = planData?.sleep_history || j.sleepLogs || [];
+      const measurements = planData?.measurement_history || j.measurements || [];
+      const stepLogs = planData?.steps_history || j.stepLogs || [];
 
-        // Sync today's habits
-        const todayHabits = j.habitLogs?.find((h) => h.date === today);
-        if (todayHabits?.habits) {
-          setHabits(todayHabits.habits);
-        }
+      setJourney({
+        ...j,
+        history: sortedHistory,
+        targetGoal: j.targetGoal ?? 0,
+        waterLogs,
+        sleepLogs,
+        measurements,
+        stepLogs,
+      });
 
-        recommendMeals(j.meals || []).then((res) => setRecipes(res || []));
-        recommendSleep(j.sleepLogs || []).then(setSleepAdvice);
-      } else {
-        recommendMeals([]).then((res) => setRecipes(res || []));
-        recommendSleep([]).then(setSleepAdvice);
+      if (j.targetGoal) setTargetInput(String(j.targetGoal));
+
+      // Sync water today
+      const today = new Date().toISOString().split("T")[0];
+      const todayWater = waterLogs.find((w) => w.date === today);
+      setWaterAmount(todayWater?.amount ?? 0);
+
+      // Sync sleep today
+      const todaySleep = sleepLogs.find((s) => s.date === today);
+      if (todaySleep) setSleepHours(todaySleep.hours);
+
+      // Sync latest measurements
+      if (measurements && measurements.length > 0) {
+        const latestM = measurements[measurements.length - 1];
+        if (latestM.waist) setWaist(String(latestM.waist));
+        if (latestM.hips) setHips(String(latestM.hips));
+        if (latestM.chest) setChest(String(latestM.chest));
       }
+
+      // Sync today's habits
+      const todayHabits = j.habitLogs?.find((h) => h.date === today);
+      if (todayHabits?.habits) {
+        setHabits(todayHabits.habits);
+      }
+
+      recommendMeals(j.meals || []).then((res) => setRecipes(res || []));
+      recommendSleep(sleepLogs || []).then(setSleepAdvice);
+
+      fetchTestRequests(session.user.id)
+        .then(setBloodTestRequests)
+        .catch(console.error);
     }
     setLoading(false);
     setRefreshing(false);
@@ -312,26 +342,41 @@ export default function DashboardScreen() {
   };
 
   const filtered = getFilteredHistory();
-  const first = journey.history[0]?.weight ?? 85;
-  const last = journey.history[journey.history.length - 1]?.weight ?? 78.5;
+  const validHistory = (journey.history || []).filter(
+    (e) => e && typeof e.weight === "number" && e.weight > 0,
+  );
+  const hasHistory = validHistory.length > 0;
+  const first = hasHistory ? validHistory[0].weight : 0;
+  const last = hasHistory ? validHistory[validHistory.length - 1].weight : 0;
+
+  // Weight loss requires at least 2 logs (start weight vs current weight). 0 or 1 log = 0 kg lost.
   const lost =
-    first > 0 && last > 0 ? parseFloat((first - last).toFixed(1)) : 6.5;
-  const current = last || 78.5;
-  const target = journey.targetGoal ?? 70;
-  const startWeight = first || 85;
+    validHistory.length >= 2 && first > 0 && last > 0
+      ? Math.max(0, parseFloat((first - last).toFixed(1)))
+      : 0;
+
+  const current = last || 0;
+  const target = journey.targetGoal ?? 0;
+  const startWeight = first || 0;
   const toGo =
     target > 0 && current > 0
       ? Math.max(0, parseFloat((current - target).toFixed(1)))
-      : 8.5;
+      : 0;
 
-  const totalGoalDelta = startWeight > target ? startWeight - target : 1;
+  const totalGoalDelta =
+    startWeight > target && target > 0 ? startWeight - target : 0;
   const currentProgressDelta =
-    startWeight > current ? startWeight - current : 0;
+    startWeight > current && current > 0 ? startWeight - current : 0;
   const progressPercent =
-    Math.min(
-      100,
-      Math.max(0, Math.round((currentProgressDelta / totalGoalDelta) * 100)),
-    ) || 43.3;
+    totalGoalDelta > 0
+      ? Math.min(
+          100,
+          Math.max(
+            0,
+            Math.round((currentProgressDelta / totalGoalDelta) * 100),
+          ),
+        )
+      : 0;
 
   const streak = (() => {
     if (!journey.history.length) return 0;
@@ -355,8 +400,8 @@ export default function DashboardScreen() {
 
   // Dynamic calculation for Weekly Comparison: This Week vs Last Week
   const getWeightLossInWindow = (startDaysAgo: number, endDaysAgo: number) => {
-    const h = journey.history || [];
-    if (h.length === 0) return 0;
+    const h = validHistory;
+    if (h.length < 2) return 0;
     const now = new Date();
     const startDate = new Date(now);
     startDate.setDate(now.getDate() - startDaysAgo);
@@ -387,8 +432,8 @@ export default function DashboardScreen() {
 
   // Dynamic calculation for Average Weekly Loss
   const avgWeeklyLoss = (() => {
-    const h = journey.history || [];
-    if (h.length < 2) return 0.7;
+    const h = validHistory;
+    if (h.length < 2) return 0;
     const firstTime = new Date(h[0].date).getTime();
     const lastTime = new Date(h[h.length - 1].date).getTime();
     const diffDays = Math.max(1, Math.round((lastTime - firstTime) / (1000 * 60 * 60 * 24)));
@@ -486,11 +531,9 @@ export default function DashboardScreen() {
     else waterLogs.push({ date: today, amount: newTotal });
     const updatedJourney = { ...journey, waterLogs };
     setJourney(updatedJourney);
-    if (user)
-      await supabase
-        .from("users")
-        .update({ weight_loss_journey: updatedJourney })
-        .eq("id", user.id);
+    if (user) {
+      await saveUserWaterHistory(user.id, waterLogs);
+    }
   };
 
   const handleWaterReset = async () => {
@@ -501,11 +544,9 @@ export default function DashboardScreen() {
     if (idx >= 0) waterLogs[idx].amount = 0;
     const updatedJourney = { ...journey, waterLogs };
     setJourney(updatedJourney);
-    if (user)
-      await supabase
-        .from("users")
-        .update({ weight_loss_journey: updatedJourney })
-        .eq("id", user.id);
+    if (user) {
+      await saveUserWaterHistory(user.id, waterLogs);
+    }
   };
 
   const handleSleepSave = async () => {
@@ -516,11 +557,9 @@ export default function DashboardScreen() {
     else sleepLogs.push({ date: today, hours: sleepHours });
     const updatedJourney = { ...journey, sleepLogs };
     setJourney(updatedJourney);
-    if (user)
-      await supabase
-        .from("users")
-        .update({ weight_loss_journey: updatedJourney })
-        .eq("id", user.id);
+    if (user) {
+      await saveUserSleepHistory(user.id, sleepLogs);
+    }
     Alert.alert("Saved", `Logged ${sleepHours} hrs of sleep.`);
   };
 
@@ -540,12 +579,29 @@ export default function DashboardScreen() {
     const updatedJourney = { ...journey, measurements };
     setSavingMeasurements(false);
     setJourney(updatedJourney);
-    if (user)
-      await supabase
-        .from("users")
-        .update({ weight_loss_journey: updatedJourney })
-        .eq("id", user.id);
+    if (user) {
+      await saveUserMeasurementHistory(user.id, measurements);
+    }
     Alert.alert("Saved", "Body measurements saved successfully.");
+  };
+
+  const handleCreateBloodTestRequest = async (conditionText: string) => {
+    if (!user) return;
+    setBloodTestLoading(true);
+    try {
+      const newReq = await createBloodTestRequest(user.id, conditionText);
+      if (newReq) {
+        setBloodTestRequests((prev) => [newReq, ...prev]);
+        Alert.alert(
+          "Request Submitted",
+          "Your blood test request has been sent to our medical team. A doctor will review your request and get back to you shortly."
+        );
+      }
+    } catch (err) {
+      console.error("Error creating blood test request:", err);
+    } finally {
+      setBloodTestLoading(false);
+    }
   };
 
   const handleHabitToggle = async (key: string) => {
@@ -581,6 +637,36 @@ export default function DashboardScreen() {
     <View style={styles.rootContainer}>
       {/* Top Navigation Bar */}
       <TopNavbar userName={userName} />
+
+      {/* Subscription Expiry / Required Notification Banner */}
+      {subStatus && (subStatus.isExpired || subStatus.status === 'none') && (
+        <View style={styles.expiryBannerContainer}>
+          <View style={styles.expiryBannerContent}>
+            <Ionicons name="alert-circle" size={24} color="#D97706" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.expiryBannerTitle}>
+                {subStatus.isExpired ? "Subscription Expired" : "Pro Membership Required"}
+              </Text>
+              <Text style={styles.expiryBannerSub}>
+                {subStatus.isExpired
+                  ? `Your subscription ended on ${subStatus.endDateStr || 'recently'}. Renew or start ₹1 AutoPay to access your dashboard.`
+                  : "Subscribe for full access to your health dashboard, diet plans, and weight loss tracking."}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.expiryBannerBtn}
+              onPress={() => setShowPricingModal(true)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.expiryBannerBtnText}>
+                {subStatus.isExpired ? "Renew Plan" : "Start ₹1 Trial"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+
 
       {/* Main Body Layout */}
       <View style={styles.bodyLayout}>
@@ -770,31 +856,15 @@ export default function DashboardScreen() {
             </View>
           </View>
 
-          {/* Games & Learning Arcade Banner Card */}
-          <TouchableOpacity
-            style={[styles.achievementsBox, { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }]}
-            onPress={() => router.push('/games')}
-            activeOpacity={0.9}
-          >
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
-                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#DCFCE7', alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="game-controller" size={22} color="#166534" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.achievementsTitle, { color: '#14532D', fontSize: 16 }]}>
-                    Play & Learn Arcade 🎮
-                  </Text>
-                  <Text style={{ fontSize: 12, color: '#166534', marginTop: 2 }}>
-                    6 funny mini-games: Swipe Junk, DNA Repair, Hanger Games & more!
-                  </Text>
-                </View>
-              </View>
-              <View style={{ backgroundColor: '#166534', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 12 }}>
-                <Text style={{ color: '#FFFFFF', fontSize: 12, fontWeight: '800' }}>PLAY</Text>
-              </View>
-            </View>
-          </TouchableOpacity>
+          {/* Intermittent Fasting & Blood Test Program */}
+          <FastingWidget />
+
+          {/* Doctor Blood Test Request Widget */}
+          <BloodTestWidget
+            requests={bloodTestRequests}
+            onRequestSubmitted={handleCreateBloodTestRequest}
+            loading={bloodTestLoading}
+          />
 
           {/* Achievements Section */}
           <AchievementsSection lostKg={lost} />
@@ -1227,6 +1297,13 @@ export default function DashboardScreen() {
         sleepLogs={journey.sleepLogs}
         measurementLogs={journey.measurements}
         habitLogs={journey.habitLogs}
+      />
+
+      {/* Pricing / AutoPay Modal */}
+      <PricingModal
+        visible={showPricingModal}
+        onClose={() => setShowPricingModal(false)}
+        onSubscribeSuccess={load}
       />
     </View>
   );
@@ -2152,5 +2229,39 @@ const styles = StyleSheet.create({
     fontSize: Fonts.sizes.xs,
     fontWeight: "700",
     color: "#2563EB",
+  },
+  expiryBannerContainer: {
+    backgroundColor: "#FEF3C7",
+    borderBottomWidth: 1,
+    borderBottomColor: "#FDE68A",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    zIndex: 10,
+  },
+  expiryBannerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  expiryBannerTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#92400E",
+  },
+  expiryBannerSub: {
+    fontSize: 11,
+    color: "#B45309",
+    marginTop: 2,
+  },
+  expiryBannerBtn: {
+    backgroundColor: "#D97706",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  expiryBannerBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
 });

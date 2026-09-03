@@ -90,7 +90,7 @@ export const RazorpayCheckoutModal: React.FC<RazorpayCheckoutModalProps> = ({
                 "currency": "INR",
                 "name": "Genestac Health",
                 "description": "${plan.title}",
-                "order_id": "${orderId}",
+                ${orderId.startsWith('sub_') ? `"subscription_id": "${orderId}",` : `"order_id": "${orderId}",`}
                 "prefill": {
                   "name": "${userName || 'Patient'}",
                   "email": "${userEmail || ''}",
@@ -103,7 +103,7 @@ export const RazorpayCheckoutModal: React.FC<RazorpayCheckoutModalProps> = ({
                   window.ReactNativeWebView.postMessage(JSON.stringify({
                     status: 'SUCCESS',
                     razorpay_payment_id: response.razorpay_payment_id,
-                    razorpay_order_id: response.razorpay_order_id,
+                    razorpay_order_id: response.razorpay_order_id || response.razorpay_subscription_id,
                     razorpay_signature: response.razorpay_signature || ''
                   }));
                 },

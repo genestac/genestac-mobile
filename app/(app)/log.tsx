@@ -8,7 +8,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { supabase } from '@/lib/supabase';
 import { Colors, Fonts, Spacing, Radius } from '@/constants/colors';
-import { analyzeMeal } from '@/lib/api';
+import {
+  analyzeMeal,
+  fetchUserPlans,
+  saveUserWaterHistory,
+  saveUserSleepHistory,
+  saveUserMeasurementHistory,
+} from '@/lib/api';
 import { MealLog, WeightJourney } from '@/lib/types';
 
 
@@ -29,12 +35,14 @@ const formatDateShort = (dateStr?: string) => {
     const day = parseInt(parts[2], 10);
     const d = new Date(year, month, day);
     if (!isNaN(d.getTime())) {
-      return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      const monthName = d.toLocaleDateString("en-US", { month: "short" });
+      return `${monthName} ${day}`;
     }
   }
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) return dateStr;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const monthName = d.toLocaleDateString("en-US", { month: "short" });
+  return `${monthName} ${d.getDate()}`;
 };
 
 const groupMealsByDate = (meals?: MealLog[]) => {
@@ -81,24 +89,24 @@ const groupMealsByDate = (meals?: MealLog[]) => {
 };
 
 export default function LogScreen() {
+  const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [journey, setJourney] = useState<WeightJourney>({ history: [] });
+
   const [activeTab, setActiveTab] = useState<'steps' | 'meals' | 'water' | 'sleep' | 'measurements' | 'habits'>('meals');
 
-  const [loading, setLoading] = useState(true);
-
-  // Meal Log
-  const [mealType, setMealType] = useState<'Morning' | 'Lunch' | 'Snacks' | 'Dinner'>('Morning');
+  // Meal Log Form State
+  const [mealType, setMealType] = useState<'Morning' | 'Lunch' | 'Snacks' | 'Dinner'>('Lunch');
   const [mealDesc, setMealDesc] = useState('');
   const [mealCalories, setMealCalories] = useState('');
   const [savingMeal, setSavingMeal] = useState(false);
 
-  // Water
+  // Water Log Form State
   const [waterToday, setWaterToday] = useState(0);
   const [savingWater, setSavingWater] = useState(false);
 
-  // Sleep
-  const [sleepHours, setSleepHours] = useState('7');
+  // Sleep Log Form State
+  const [sleepHours, setSleepHours] = useState('7.5');
   const [savingSleep, setSavingSleep] = useState(false);
 
   // Measurements
@@ -115,16 +123,33 @@ export default function LogScreen() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) return;
     setUser(session.user);
-    const { data } = await supabase.from('users').select('weight_loss_journey').eq('id', session.user.id).maybeSingle();
-    if (data?.weight_loss_journey) {
-      const j = data.weight_loss_journey as WeightJourney;
-      setJourney(j);
-      const today = new Date().toISOString().split('T')[0];
-      const waterLog = j.waterLogs?.find(w => w.date === today);
-      setWaterToday(waterLog?.amount ?? 0);
-      const todayHabit = j.habitLogs?.find(h => h.date === today);
-      if (todayHabit) setHabits({ ...habits, ...todayHabit.habits as any });
-    }
+
+    const [userRes, planData] = await Promise.all([
+      supabase.from('users').select('weight_loss_journey').eq('id', session.user.id).maybeSingle(),
+      fetchUserPlans(session.user.id),
+    ]);
+
+    const j = (userRes.data?.weight_loss_journey as WeightJourney) || { history: [] };
+    const waterLogs = planData?.water_history || j.waterLogs || [];
+    const sleepLogs = planData?.sleep_history || j.sleepLogs || [];
+    const measurements = planData?.measurement_history || j.measurements || [];
+    const stepLogs = planData?.steps_history || j.stepLogs || [];
+
+    const updatedJ: WeightJourney = {
+      ...j,
+      waterLogs,
+      sleepLogs,
+      measurements,
+      stepLogs,
+    };
+    setJourney(updatedJ);
+
+    const today = new Date().toISOString().split('T')[0];
+    const waterLog = waterLogs.find(w => w.date === today);
+    setWaterToday(waterLog?.amount ?? 0);
+    const todayHabit = j.habitLogs?.find(h => h.date === today);
+    if (todayHabit) setHabits({ ...habits, ...todayHabit.habits as any });
+
     setLoading(false);
   }, []);
 
@@ -169,7 +194,10 @@ export default function LogScreen() {
     if (idx >= 0) waterLogs[idx].amount = newTotal;
     else waterLogs.push({ date: today, amount: newTotal });
     const newJ = { ...journey, waterLogs };
-    await saveJourney(newJ);
+    setJourney(newJ);
+    if (user) {
+      await saveUserWaterHistory(user.id, waterLogs);
+    }
     setSavingWater(false);
   };
 
@@ -182,7 +210,10 @@ export default function LogScreen() {
     if (idx >= 0) sleepLogs[idx].hours = hrs;
     else sleepLogs.push({ date: today, hours: hrs });
     const newJ = { ...journey, sleepLogs };
-    await saveJourney(newJ);
+    setJourney(newJ);
+    if (user) {
+      await saveUserSleepHistory(user.id, sleepLogs);
+    }
     setSavingSleep(false);
     Alert.alert('Saved', `Logged ${hrs} hrs of sleep.`);
   };
@@ -201,7 +232,10 @@ export default function LogScreen() {
     if (idx >= 0) measurements[idx] = entry;
     else measurements.push(entry);
     const newJ = { ...journey, measurements };
-    await saveJourney(newJ);
+    setJourney(newJ);
+    if (user) {
+      await saveUserMeasurementHistory(user.id, measurements);
+    }
     setSavingMeasurements(false);
     Alert.alert('Saved', 'Measurements saved successfully.');
   };

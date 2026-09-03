@@ -16,7 +16,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ userName }) => {
         <View style={styles.topNavLeft}>
           <View style={styles.logoWrap}>
             <Image
-              source={require("../../assets/images/brand/logo.webp")}
+              source={require("../../assets/images/brand/logo.png")}
               style={styles.logoImage}
               resizeMode="contain"
             />
@@ -27,7 +27,7 @@ export const TopNavbar: React.FC<TopNavbarProps> = ({ userName }) => {
         <View style={styles.topNavRight}>
           <View style={styles.topProfileBadge}>
             <Text style={styles.topProfileText}>
-              {userName.substring(0, 2).toUpperCase()}
+              {(userName || "User").substring(0, 2).toUpperCase()}
             </Text>
           </View>
         </View>

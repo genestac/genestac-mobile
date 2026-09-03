@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { WeightJourney, MealLog, SleepLog, Referral, RewardTransaction, ReferralSummary, StepLog } from './types';
+import { WeightJourney, MealLog, SleepLog, WaterLog, MeasurementLog, StepLog, Referral, RewardTransaction, ReferralSummary, UserPlan, HealthProfile, DietPlan, ExercisePlan, BloodTestRequest, TestType } from './types';
 
 
 
@@ -61,12 +61,12 @@ export async function saveUserJourney(userId: string, journey: WeightJourney): P
   }
 }
 
-// 3. Fetch User Diet & Exercise Plans directly from Supabase
-export async function fetchUserPlans(userId: string) {
+// 3. Fetch User Plans & History directly from Supabase
+export async function fetchUserPlans(userId: string): Promise<UserPlan | null> {
   try {
     const { data, error } = await supabase
       .from('user_plans')
-      .select('diet_plan, exercise_plan')
+      .select('*')
       .eq('user_id', userId)
       .maybeSingle();
 
@@ -75,10 +75,47 @@ export async function fetchUserPlans(userId: string) {
       return null;
     }
 
-    return data;
+    return (data as UserPlan) || null;
   } catch (err) {
     console.error('Failed to fetch user plans from Supabase:', err);
     return null;
+  }
+}
+
+// 3b. Save / Update User Plans & History directly in Supabase
+export async function saveUserPlans(userId: string, updates: Partial<UserPlan>): Promise<boolean> {
+  try {
+    const existing = await fetchUserPlans(userId);
+    if (existing && existing.id) {
+      const { error } = await supabase
+        .from('user_plans')
+        .update({
+          ...updates,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id);
+
+      if (error) {
+        console.error('Error updating user_plans in Supabase:', error);
+        return false;
+      }
+    } else {
+      const { error } = await supabase
+        .from('user_plans')
+        .insert({
+          user_id: userId,
+          ...updates,
+        });
+
+      if (error) {
+        console.error('Error inserting into user_plans in Supabase:', error);
+        return false;
+      }
+    }
+    return true;
+  } catch (err) {
+    console.error('Failed to save user_plans in Supabase:', err);
+    return false;
   }
 }
 
@@ -622,43 +659,322 @@ export async function processReferralReward(refereeUserId: string, rewardAmount:
   }
 }
 
-// 9. Step Log API Helpers
+// 9. History Log API Helpers (User Plans)
 export async function saveUserStepLog(
   userId: string,
   todayLog: StepLog,
   customGoal?: number
 ): Promise<boolean> {
   try {
-    const journey = await fetchUserJourney(userId);
-    const currentJourney: WeightJourney = journey || { history: [] };
-
-    const stepLogs = currentJourney.stepLogs || [];
+    const userPlan = await fetchUserPlans(userId);
+    const stepsHistory = userPlan?.steps_history || [];
     const todayStr = todayLog.date.split('T')[0];
 
-    const existingIdx = stepLogs.findIndex(s => s.date.split('T')[0] === todayStr);
+    const existingIdx = stepsHistory.findIndex(s => s.date.split('T')[0] === todayStr);
 
     let updatedStepLogs: StepLog[];
     if (existingIdx >= 0) {
-      updatedStepLogs = [...stepLogs];
+      updatedStepLogs = [...stepsHistory];
       updatedStepLogs[existingIdx] = {
         ...updatedStepLogs[existingIdx],
         ...todayLog,
         date: todayStr,
       };
     } else {
-      updatedStepLogs = [{ ...todayLog, date: todayStr }, ...stepLogs];
+      updatedStepLogs = [{ ...todayLog, date: todayStr }, ...stepsHistory];
     }
 
-    const updatedJourney: WeightJourney = {
-      ...currentJourney,
-      stepGoal: customGoal ?? currentJourney.stepGoal ?? 10000,
-      stepLogs: updatedStepLogs,
-    };
+    // Save steps_history in user_plans
+    const planSuccess = await saveUserPlans(userId, { steps_history: updatedStepLogs });
 
-    return await saveUserJourney(userId, updatedJourney);
+    // Optionally update stepGoal in weight_loss_journey if specified
+    if (customGoal) {
+      const journey = await fetchUserJourney(userId);
+      const currentJourney = journey || { history: [] };
+      await saveUserJourney(userId, { ...currentJourney, stepGoal: customGoal });
+    }
+
+    return planSuccess;
   } catch (err) {
     console.error('Failed to save step log to Supabase:', err);
     return false;
+  }
+}
+
+export async function saveUserWaterHistory(
+  userId: string,
+  waterHistory: WaterLog[]
+): Promise<boolean> {
+  return await saveUserPlans(userId, { water_history: waterHistory });
+}
+
+export async function saveUserSleepHistory(
+  userId: string,
+  sleepHistory: SleepLog[]
+): Promise<boolean> {
+  return await saveUserPlans(userId, { sleep_history: sleepHistory });
+}
+
+export async function saveUserMeasurementHistory(
+  userId: string,
+  measurementHistory: MeasurementLog[]
+): Promise<boolean> {
+  return await saveUserPlans(userId, { measurement_history: measurementHistory });
+}
+
+// 10. AI Diet & Exercise Plan Generator based on HealthProfile
+export async function generateAIUserPlans(
+  userId: string,
+  profile: HealthProfile
+): Promise<{ diet_plan: DietPlan; exercise_plan: ExercisePlan } | null> {
+  const nvidiaKey = process.env.EXPO_PUBLIC_NVIDIA_KEY || process.env.NVIDIA_KEY || '';
+
+  const profileSummary = `
+Age: ${profile.age || 30} years
+Gender: ${profile.gender || 'Not specified'}
+Weight: ${profile.weightKg || 70} kg, Target: ${profile.targetWeightKg || 65} kg, Height: ${profile.heightCm || 170} cm
+Primary Goal: ${profile.primaryGoal || 'Weight Loss'}
+Activity Level: ${profile.activityLevel || 'Moderately Active'}
+Dietary Preference: ${profile.dietaryPreference || 'Vegetarian'}
+Medical Conditions: ${profile.medicalConditions || 'None'}
+Allergies: ${profile.allergies || 'None'}
+`.trim();
+
+  let dietPlan: DietPlan | null = null;
+  let exercisePlan: ExercisePlan | null = null;
+
+  try {
+    const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${nvidiaKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'meta/llama-3.1-8b-instruct',
+        messages: [
+          {
+            role: 'user',
+            content: `You are an expert AI nutritionist and fitness trainer. Based on the user's Health Profile:\n${profileSummary}\n\nGenerate a comprehensive 7-day Diet Plan and 7-day Exercise Plan for days (monday, tuesday, wednesday, thursday, friday, saturday, sunday).\nRespond ONLY in valid JSON format with two root keys: "diet_plan" and "exercise_plan".\n"diet_plan" maps each weekday string to an object with "breakfast", "lunch", "snacks", "dinner". Each meal can be a string description or an object with "meal" description.\n"exercise_plan" maps each weekday string to an object with "type" (string), "duration_minutes" (number), and "exercises" (array of objects with "name", "sets", "reps" or "duration").\nDo not include markdown or backticks in the response.`,
+          },
+        ],
+        max_tokens: 1500,
+        temperature: 0.3,
+      }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      const rawContent = data.choices?.[0]?.message?.content || '';
+      const cleaned = rawContent.replace(/```json/gi, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
+      if (parsed.diet_plan && parsed.exercise_plan) {
+        dietPlan = parsed.diet_plan;
+        exercisePlan = parsed.exercise_plan;
+      }
+    }
+  } catch (err) {
+    console.error('NVIDIA AI Plan Generation failed, using smart profile-tailored fallback:', err);
+  }
+
+  // Fallback Plans tailored to profile
+  if (!dietPlan || !exercisePlan) {
+    const pref = profile.dietaryPreference || 'Vegetarian';
+    const isVeg = pref === 'Vegetarian' || pref === 'Vegan';
+
+    dietPlan = dietPlan || {
+      monday: {
+        breakfast: isVeg ? "Oatmeal with chia seeds, almonds & skimmed milk" : "2 Boiled eggs with whole wheat toast & green tea",
+        lunch: isVeg ? "2 Multigrain Roti, Dal Tadka, Mixed Veggie salad & Curd" : "Grilled Chicken Breast, Brown Rice & Cucumber Salad",
+        snacks: "Roasted Makhana & 1 cup Green Tea",
+        dinner: isVeg ? "Paneer Bhurji with 1 Roti & Cucumber salad" : "Baked Fish Fillet with steamed Broccoli",
+      },
+      tuesday: {
+        breakfast: isVeg ? "Vegetable Poha with roasted peanuts & Mint Chutney" : "Egg White Omelette with spinach & brown toast",
+        lunch: isVeg ? "1 cup Quinoa, Chana Masala & Tossed Salad" : "Chicken Salad Bowl with olive oil dressing",
+        snacks: "Handful of Walnuts & Almonds",
+        dinner: isVeg ? "Lauki Bottle Gourd Curry, 1 Roti & Salad" : "Grilled Tofu or Egg Curry with 1 Roti",
+      },
+      wednesday: {
+        breakfast: isVeg ? "Besan Chilla with spinach & mint chutney" : "Scrambled Eggs with avocado toast",
+        lunch: isVeg ? "Rajma Curry, Brown Rice & Kachumber Salad" : "Steamed Chicken Momos / Bowl with Fresh Salad",
+        snacks: "Sprouted Moong Salad with Lemon",
+        dinner: isVeg ? "Mixed Vegetable Soup & Paneer Tikka" : "Grilled Chicken & Asparagus",
+      },
+      thursday: {
+        breakfast: isVeg ? "Idli with Sambhar & Coconut Chutney" : "Boiled Eggs & Fruit Salad",
+        lunch: isVeg ? "2 Moong Dal Chilla with Mint Raita" : "Grilled Chicken Wrap with whole wheat roti",
+        snacks: "1 Apple with 1 tsp Peanut Butter",
+        dinner: isVeg ? "Palak Paneer with 1 Bajra Roti" : "Egg Curry with steamed Brown Rice",
+      },
+      friday: {
+        breakfast: isVeg ? "Avocado Toast & Chia Seed Pudding" : "Egg White Omelette with Mushrooms",
+        lunch: isVeg ? "Brown Rice Pulao with Mixed Veg & Boondi Raita" : "Chicken Stir-fry with Peppers & Mushrooms",
+        snacks: "Roasted Chana & Herbal Tea",
+        dinner: isVeg ? "Clear Vegetable Soup & Tofu Salad" : "Baked Salmon or Grilled Chicken with Salad",
+      },
+      saturday: {
+        breakfast: isVeg ? "Stuffed Methi Paratha with Fresh Curd" : "French Toast with honey & Berries",
+        lunch: isVeg ? "Paneer Kathi Roll (Whole Wheat) & Green Salad" : "Grilled Chicken Bowl with Quinoa",
+        snacks: "Dark Chocolate (1 square) & Almonds",
+        dinner: isVeg ? "Dal Khichdi with Ghee & Cucumber Salad" : "Chicken Soup & Grilled Veggies",
+      },
+      sunday: {
+        breakfast: isVeg ? "Multigrain Pancakes with Berries" : "Eggs Benedict on Whole Grain Bread",
+        lunch: isVeg ? "Special Veg Thali (Moderate Portions)" : "Roasted Chicken with Veggies & Brown Rice",
+        snacks: "Coconut Water & Roasted Seeds",
+        dinner: isVeg ? "Light Vegetable Soup & Salad" : "Grilled Fish with Lemon Butter Sauce",
+      },
+    };
+
+    exercisePlan = exercisePlan || {
+      monday: {
+        type: "Full Body Warm-up & Cardio",
+        duration_minutes: 30,
+        exercises: [
+          { name: "Brisk Walk / Jog", duration: "20 mins", sets: 1 },
+          { name: "Jumping Jacks", reps: 15, sets: 3 },
+          { name: "Full Body Stretch", duration: "5 mins", sets: 1 },
+        ],
+      },
+      tuesday: {
+        type: "Lower Body & Core",
+        duration_minutes: 35,
+        exercises: [
+          { name: "Bodyweight Squats", reps: 15, sets: 3 },
+          { name: "Walking Lunges", reps: "10 per leg", sets: 3 },
+          { name: "Plank Hold", duration: "30 seconds", sets: 3 },
+        ],
+      },
+      wednesday: {
+        type: "Active Recovery & Mobility",
+        duration_minutes: 25,
+        exercises: [
+          { name: "Light Yoga / Mobility Flow", duration: "20 mins", sets: 1 },
+          { name: "Deep Breathing", duration: "5 mins", sets: 1 },
+        ],
+      },
+      thursday: {
+        type: "Upper Body & Core Strength",
+        duration_minutes: 35,
+        exercises: [
+          { name: "Incline Push-ups", reps: 12, sets: 3 },
+          { name: "Dumbbell/Bottle Rows", reps: 12, sets: 3 },
+          { name: "Bicycle Crunches", reps: 15, sets: 3 },
+        ],
+      },
+      friday: {
+        type: "HIIT & Fat Burn",
+        duration_minutes: 30,
+        exercises: [
+          { name: "High Knees", duration: "45 secs", sets: 4 },
+          { name: "Mountain Climbers", duration: "45 secs", sets: 4 },
+          { name: "Burpees (Modified)", reps: 10, sets: 3 },
+        ],
+      },
+      saturday: {
+        type: "Legs & Abs Burnout",
+        duration_minutes: 35,
+        exercises: [
+          { name: "Sumo Squats", reps: 15, sets: 3 },
+          { name: "Glute Bridges", reps: 15, sets: 3 },
+          { name: "Russian Twists", reps: 20, sets: 3 },
+        ],
+      },
+      sunday: {
+        type: "Rest & Stretches",
+        duration_minutes: 20,
+        exercises: [
+          { name: "Gentle Evening Walk", duration: "15 mins", sets: 1 },
+          { name: "Hamstring & Quad Stretches", duration: "5 mins", sets: 1 },
+        ],
+      },
+    };
+  }
+
+  // Save health_profile, diet_plan, exercise_plan, and set doctor_review: false
+  await saveUserPlans(userId, {
+    health_profile: profile,
+    diet_plan: dietPlan,
+    exercise_plan: exercisePlan,
+    doctor_review: false,
+  });
+
+  return { diet_plan: dietPlan, exercise_plan: exercisePlan };
+}
+
+// 11. Helper to update Doctor Review status
+export async function updateDoctorReviewStatus(userId: string, approved: boolean): Promise<boolean> {
+  return await saveUserPlans(userId, { doctor_review: approved });
+}
+
+// 12. Test Requests API Helpers
+export async function fetchTestRequests(userId: string): Promise<BloodTestRequest[]> {
+  try {
+    const { data, error } = await supabase
+      .from('test_requests')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching test requests:', error);
+      return [];
+    }
+
+    return (data as BloodTestRequest[]) || [];
+  } catch (err) {
+    console.error('Failed to fetch test requests:', err);
+    return [];
+  }
+}
+
+export async function createBloodTestRequest(
+  userId: string,
+  conditionText: string
+): Promise<BloodTestRequest | null> {
+  try {
+    const { data, error } = await supabase
+      .from('test_requests')
+      .insert({
+        user_id: userId,
+        condition_text: conditionText,
+        status: 'pending',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error inserting blood test request into Supabase:', error);
+      return null;
+    }
+
+    return (data as BloodTestRequest) || null;
+  } catch (err) {
+    console.error('Failed to create blood test request:', err);
+    return null;
+  }
+}
+
+// 13. Fetch available Test Types for dropdown selection
+export async function fetchTestTypes(): Promise<TestType[]> {
+  try {
+    const { data, error } = await supabase
+      .from('test_types')
+      .select('*')
+      .eq('is_active', true)
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching test types:', error);
+      return [];
+    }
+
+    return (data as TestType[]) || [];
+  } catch (err) {
+    console.error('Failed to fetch test types:', err);
+    return [];
   }
 }
 

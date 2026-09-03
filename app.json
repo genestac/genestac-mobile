@@ -21,7 +21,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/icons/icon.png",
+        "foregroundImage": "./assets/icons/android-icon-foreground.png",
         "backgroundColor": "#FFFFFF"
       },
       "package": "com.genestac.app",

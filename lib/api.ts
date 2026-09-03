@@ -121,7 +121,7 @@ export async function saveUserPlans(userId: string, updates: Partial<UserPlan>):
 
 // 4. Meal Analysis Helper powered by NVIDIA Llama 3.1 AI API
 export async function analyzeMeal(description: string): Promise<MealAnalysisResult> {
-  const nvidiaKey = process.env.EXPO_PUBLIC_NVIDIA_KEY || process.env.NVIDIA_KEY || '';
+  const nvidiaKey = process.env.EXPO_PUBLIC_NVIDIA_KEY! || process.env.NVIDIA_KEY! || '';
 
   try {
     const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
@@ -171,7 +171,7 @@ export async function analyzeMeal(description: string): Promise<MealAnalysisResu
 
 // 5. Recipe Recommendations Helper powered by NVIDIA Llama 3.1 AI API
 export async function recommendMeals(meals: MealLog[]): Promise<RecipeRecommendation[]> {
-  const nvidiaKey = process.env.EXPO_PUBLIC_NVIDIA_KEY || process.env.NVIDIA_KEY || '';
+  const nvidiaKey = process.env.EXPO_PUBLIC_NVIDIA_KEY! || process.env.NVIDIA_KEY! || '';
 
   const fallbackRecommendations: RecipeRecommendation[] = [
     {
@@ -246,7 +246,7 @@ export async function recommendMeals(meals: MealLog[]): Promise<RecipeRecommenda
 
 // 6. Sleep Hygiene Recommendation Helper powered by NVIDIA Llama 3.1 AI API
 export async function recommendSleep(sleepLogs: SleepLog[]): Promise<SleepRecommendation> {
-  const nvidiaKey = process.env.EXPO_PUBLIC_NVIDIA_KEY || process.env.NVIDIA_KEY || '';
+  const nvidiaKey = process.env.EXPO_PUBLIC_NVIDIA_KEY! || process.env.NVIDIA_KEY! || '';
 
   const fallbackAdvice: SleepRecommendation = {
     targetHours: 8.0,
@@ -365,16 +365,16 @@ function sha1(str: string): string {
 // 7. Cloudinary Upload Integration (Signed Upload)
 export async function uploadToCloudinary(imageUri: string): Promise<string> {
   const cloudName =
-    process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME ||
-    process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ||
+    process.env.EXPO_PUBLIC_CLOUDINARY_CLOUD_NAME! ||
+    process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME! ||
     "";
   const apiKey =
-    process.env.EXPO_PUBLIC_CLOUDINARY_API_KEY ||
-    process.env.CLOUDINARY_API_KEY ||
+    process.env.EXPO_PUBLIC_CLOUDINARY_API_KEY! ||
+    process.env.CLOUDINARY_API_KEY! ||
     "";
   const apiSecret =
-    process.env.EXPO_PUBLIC_CLOUDINARY_API_SECRET ||
-    process.env.CLOUDINARY_API_SECRET ||
+    process.env.EXPO_PUBLIC_CLOUDINARY_API_SECRET! ||
+    process.env.CLOUDINARY_API_SECRET! ||
     "";
 
   if (!imageUri || imageUri.startsWith("http://") || imageUri.startsWith("https://")) {
@@ -727,7 +727,7 @@ export async function generateAIUserPlans(
   userId: string,
   profile: HealthProfile
 ): Promise<{ diet_plan: DietPlan; exercise_plan: ExercisePlan } | null> {
-  const nvidiaKey = process.env.EXPO_PUBLIC_NVIDIA_KEY || process.env.NVIDIA_KEY || '';
+  const nvidiaKey = process.env.EXPO_PUBLIC_NVIDIA_KEY! || process.env.NVIDIA_KEY! || '';
 
   const profileSummary = `
 Age: ${profile.age || 30} years

@@ -62,11 +62,11 @@ export async function fetchMobilePlans(): Promise<Record<string, RazorpayPlan>> 
 }
 
 export const RAZORPAY_KEY_ID =
-  process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID ||
-  process.env.RAZORPAY_KEY_ID ||
+  process.env.EXPO_PUBLIC_RAZORPAY_KEY_ID! ||
+  process.env.RAZORPAY_KEY_ID! ||
   '';
 
-const RAZORPAY_KEY_SECRET = process.env.EXPO_PUBLIC_RAZORPAY_KEY_SECRET || process.env.RAZORPAY_KEY_SECRET || '';
+const RAZORPAY_KEY_SECRET = process.env.EXPO_PUBLIC_RAZORPAY_KEY_SECRET! || process.env.RAZORPAY_KEY_SECRET! || '';
 
 /**
  * Create a Razorpay Order via Razorpay Orders API

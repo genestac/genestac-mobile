@@ -253,8 +253,8 @@ export async function sendInvoiceEmail(invoice: InvoiceData): Promise<boolean> {
   `;
 
   try {
-    const apiKey = process.env.EXPO_PUBLIC_RESEND_API_KEY || process.env.RESEND_API_KEY || '';
-    const resendFrom = process.env.EXPO_PUBLIC_RESEND_FROM || process.env.RESEND_FROM || 'Genestac Health <noreply@genestac.com>';
+    const apiKey = process.env.EXPO_PUBLIC_RESEND_API_KEY! || process.env.RESEND_API_KEY! || '';
+    const resendFrom = process.env.EXPO_PUBLIC_RESEND_FROM! || process.env.RESEND_FROM! || 'Genestac Health <noreply@genestac.com>';
 
     if (!apiKey) {
       console.warn('RESEND_API_KEY / EXPO_PUBLIC_RESEND_API_KEY is not configured in environment.');
@@ -327,8 +327,8 @@ export async function sendRegistrationOtpEmail(params: {
       console.error('Failed to store OTP in metadata:', updateError);
     }
 
-    const apiKey = process.env.EXPO_PUBLIC_RESEND_API_KEY || process.env.RESEND_API_KEY || '';
-    const resendFrom = process.env.EXPO_PUBLIC_RESEND_FROM || process.env.RESEND_FROM || 'Genestac Health <noreply@genestac.com>';
+    const apiKey = process.env.EXPO_PUBLIC_RESEND_API_KEY! || process.env.RESEND_API_KEY! || '';
+    const resendFrom = process.env.EXPO_PUBLIC_RESEND_FROM! || process.env.RESEND_FROM! || 'Genestac Health <noreply@genestac.com>';
 
     if (!apiKey) {
       console.warn('RESEND_API_KEY is not configured in environment. OTP saved in DB only.');

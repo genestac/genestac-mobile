@@ -2,14 +2,18 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, Animated, StatusBar, Image,
-  ActivityIndicator, Dimensions, Alert,
+  ActivityIndicator, Dimensions, Alert, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { supabase } from '@/lib/supabase';
 import { healthChat, HealthChatMessage } from '@/lib/healthChat';
 import { SarvamVoiceAgent, VoiceAgentStatus } from '@/lib/sarvamVoice';
+import { analyzeFoodImage, FoodItem } from '@/lib/openai';
+import { MealLog, WeightJourney } from '@/lib/types';
 
 const { width } = Dimensions.get('window');
 
@@ -128,6 +132,17 @@ export default function AIDoctorChatScreen() {
   const [sessionLoaded, setSessionLoaded] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [userName, setUserName] = useState('');
+
+  // ── Camera diet logging state ──────────────────────────────────────────────
+  const [cameraLoading, setCameraLoading] = useState(false);
+  const [foodModal, setFoodModal] = useState(false);
+  const [detectedFoods, setDetectedFoods] = useState<FoodItem[]>([]);
+  const [foodServings, setFoodServings] = useState<number[]>([]);
+  const [foodGrams, setFoodGrams] = useState<string[]>([]); // actual grams override per item
+  const [mealDescCaption, setMealDescCaption] = useState('');
+  const [mealType, setMealType] = useState<'Morning' | 'Lunch' | 'Snacks' | 'Dinner'>('Lunch');
+  const [savingMeal, setSavingMeal] = useState(false);
+  const [capturedImageUri, setCapturedImageUri] = useState<string | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
   const agentRef = useRef<SarvamVoiceAgent | null>(null);
@@ -315,6 +330,112 @@ export default function AIDoctorChatScreen() {
     setVoiceState('idle');
   };
 
+  // ── Camera diet logging ───────────────────────────────────────────────────────
+  const handleCameraLog = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Camera access is required to log meals from photos.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaType.Images,
+        quality: 0.6,
+        base64: true,
+        allowsEditing: false,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const asset = result.assets[0];
+      setCapturedImageUri(asset.uri);
+      setCameraLoading(true);
+
+      // Convert to base64 if not already provided
+      let base64 = asset.base64;
+      if (!base64) {
+        base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+      }
+
+      const analysis = await analyzeFoodImage(base64!);
+      setDetectedFoods(analysis.items);
+      setFoodServings(analysis.items.map(() => 1)); // default 1 serving each
+      setFoodGrams(analysis.items.map(() => '')); // empty = use servings × base
+      setMealDescCaption(analysis.mealDescription);
+
+      // Auto-set meal type based on time of day
+      const hour = new Date().getHours();
+      if (hour < 11) setMealType('Morning');
+      else if (hour < 15) setMealType('Lunch');
+      else if (hour < 18) setMealType('Snacks');
+      else setMealType('Dinner');
+
+      setFoodModal(true);
+    } catch (err) {
+      console.error('[CameraLog]', err);
+      Alert.alert('Error', 'Could not analyze the photo. Please try again.');
+    } finally {
+      setCameraLoading(false);
+    }
+  };
+
+  // Calories = grams input takes priority over servings multiplier
+  const getItemCalories = (item: FoodItem, idx: number): number => {
+    const gramsStr = foodGrams[idx]?.trim();
+    const grams = gramsStr ? parseFloat(gramsStr) : NaN;
+    if (!isNaN(grams) && grams > 0 && item.servingGrams > 0) {
+      // Scale proportionally: (userGrams / servingGrams) * baseCalories
+      return Math.round((grams / item.servingGrams) * item.calories);
+    }
+    // Fall back to serving multiplier
+    return Math.round(item.calories * (foodServings[idx] ?? 1));
+  };
+
+  const totalCaloriesFromDetected = detectedFoods.reduce(
+    (sum, item, i) => sum + getItemCalories(item, i), 0
+  );
+
+  const handleConfirmMealLog = async () => {
+    if (!userId) return;
+    setSavingMeal(true);
+    try {
+      const { data: userRow } = await supabase
+        .from('users')
+        .select('weight_loss_journey')
+        .eq('id', userId)
+        .maybeSingle();
+
+      const journey: WeightJourney = (userRow?.weight_loss_journey as WeightJourney) || { history: [] };
+      const description = detectedFoods
+        .map((f, i) => {
+          const gramsStr = foodGrams[i]?.trim();
+          const grams = gramsStr ? parseFloat(gramsStr) : NaN;
+          if (!isNaN(grams) && grams > 0) {
+            return `${f.name} (${grams}g)`;
+          }
+          return `${f.name} (${foodServings[i]}× ${f.quantity})`;
+        })
+        .join(', ');
+
+      const newMeal: MealLog = {
+        id: Math.random().toString(36).substring(7),
+        date: new Date().toISOString(),
+        mealType,
+        description,
+        calories: totalCaloriesFromDetected,
+        feedback: `Logged via camera. ${mealDescCaption}`,
+      };
+      const meals = [...(journey.meals || []), newMeal];
+      await supabase.from('users').update({ weight_loss_journey: { ...journey, meals } }).eq('id', userId);
+
+      setFoodModal(false);
+      Alert.alert('Meal Logged! 🎉', `${description}\n\n${totalCaloriesFromDetected} kcal logged for ${mealType}.`);
+    } catch (err) {
+      Alert.alert('Error', 'Could not save meal. Please try again.');
+    } finally {
+      setSavingMeal(false);
+    }
+  };
+
   // ── Cleanup on unmount ────────────────────────────────────────────────────────
   useEffect(() => {
     return () => { agentRef.current?.disconnect(); };
@@ -422,13 +543,20 @@ export default function AIDoctorChatScreen() {
             <Text style={s.headerSub}>Powered by Sarvam AI · Always available</Text>
           </View>
         </View>
-        <TouchableOpacity style={s.voiceCallBtn} onPress={startVoiceCall} activeOpacity={0.85}>
-          <Ionicons name="call" size={20} color={C.white} />
-        </TouchableOpacity>
+        {/* Voice call button hidden from UI — code preserved */}
+        {false && (
+          <TouchableOpacity style={s.voiceCallBtn} onPress={startVoiceCall} activeOpacity={0.85}>
+            <Ionicons name="call" size={20} color={C.white} />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Messages */}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={0}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
         {!sessionLoaded ? (
           <View style={s.loadingView}>
             <ActivityIndicator size="large" color={C.teal} />
@@ -490,6 +618,18 @@ export default function AIDoctorChatScreen() {
         {/* Input bar */}
         <View style={s.inputBar}>
           <View style={s.inputRow}>
+            {/* Camera diet log button */}
+            <TouchableOpacity
+              style={s.cameraBtn}
+              onPress={handleCameraLog}
+              disabled={cameraLoading}
+              activeOpacity={0.8}
+            >
+              {cameraLoading
+                ? <ActivityIndicator size="small" color={C.teal} />
+                : <Ionicons name="camera" size={22} color={C.teal} />}
+            </TouchableOpacity>
+
             <TextInput
               style={s.input}
               placeholder="Ask your health coach..."
@@ -511,14 +651,150 @@ export default function AIDoctorChatScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Voice call shortcut */}
-          <TouchableOpacity style={s.voiceBarBtn} onPress={startVoiceCall} activeOpacity={0.85}>
-            <Ionicons name="mic" size={16} color={C.teal} />
-            <Text style={s.voiceBarBtnText}>Start Voice Call with AI Health Coach</Text>
-            <Ionicons name="call" size={16} color={C.teal} />
-          </TouchableOpacity>
+          {/* Voice call shortcut — hidden from UI, code preserved */}
+          {false && (
+            <TouchableOpacity style={s.voiceBarBtn} onPress={startVoiceCall} activeOpacity={0.85}>
+              <Ionicons name="mic" size={16} color={C.teal} />
+              <Text style={s.voiceBarBtnText}>Start Voice Call with AI Health Coach</Text>
+              <Ionicons name="call" size={16} color={C.teal} />
+            </TouchableOpacity>
+          )}
         </View>
       </KeyboardAvoidingView>
+
+      {/* ── Camera Food Log Confirmation Modal ──────────────────────────────── */}
+      <Modal
+        visible={foodModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setFoodModal(false)}
+      >
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            {/* Modal header */}
+            <View style={s.modalHeader}>
+              <View>
+                <Text style={s.modalTitle}>Confirm Meal</Text>
+                <Text style={s.modalSubtitle} numberOfLines={2}>{mealDescCaption}</Text>
+              </View>
+              <TouchableOpacity onPress={() => setFoodModal(false)} style={s.modalClose}>
+                <Ionicons name="close" size={20} color={C.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Meal photo thumbnail */}
+            {capturedImageUri && (
+              <Image source={{ uri: capturedImageUri }} style={s.photoThumb} resizeMode="cover" />
+            )}
+
+            {/* Meal type selector */}
+            <View style={s.mealTypeRow}>
+              {(['Morning', 'Lunch', 'Snacks', 'Dinner'] as const).map(t => (
+                <TouchableOpacity
+                  key={t}
+                  style={[s.mealTypeChip, mealType === t && s.mealTypeChipActive]}
+                  onPress={() => setMealType(t)}
+                >
+                  <Text style={[s.mealTypeText, mealType === t && s.mealTypeTextActive]}>{t}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Food item list with quantity controls */}
+            <ScrollView style={s.foodList} showsVerticalScrollIndicator={false}>
+              {detectedFoods.map((item, idx) => {
+                const servings = foodServings[idx] ?? 1;
+                const gramsStr = foodGrams[idx] ?? '';
+                const itemCals = getItemCalories(item, idx);
+                const usingGrams = gramsStr.trim() !== '' && !isNaN(parseFloat(gramsStr)) && parseFloat(gramsStr) > 0;
+                return (
+                  <View key={idx} style={s.foodItem}>
+                    <View style={s.foodItemLeft}>
+                      <Text style={s.foodName}>{item.name}</Text>
+                      <Text style={s.foodQuantity}>
+                        {usingGrams
+                          ? `${gramsStr}g · ${Math.round(item.calories / item.servingGrams * 10) / 10} kcal/g`
+                          : `${item.quantity} · ${item.calories} kcal/serving`}
+                      </Text>
+                      {/* Grams override input */}
+                      <View style={s.gramsRow}>
+                        <Ionicons name="scale-outline" size={13} color={usingGrams ? C.teal : C.textMuted} />
+                        <TextInput
+                          style={[s.gramsInput, usingGrams && s.gramsInputActive]}
+                          placeholder={`${item.servingGrams}g (AI estimate)`}
+                          placeholderTextColor={C.textMuted}
+                          keyboardType="numeric"
+                          value={gramsStr}
+                          onChangeText={(val) => {
+                            const updated = [...foodGrams];
+                            updated[idx] = val;
+                            setFoodGrams(updated);
+                          }}
+                          maxLength={6}
+                        />
+                        {usingGrams && (
+                          <TouchableOpacity onPress={() => {
+                            const updated = [...foodGrams];
+                            updated[idx] = '';
+                            setFoodGrams(updated);
+                          }}>
+                            <Ionicons name="close-circle" size={15} color={C.textMuted} />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                    {/* Only show ×servings when no gram override */}
+                    {!usingGrams && (
+                      <View style={s.qtyControl}>
+                        <TouchableOpacity
+                          style={s.qtyBtn}
+                          onPress={() => {
+                            const updated = [...foodServings];
+                            updated[idx] = Math.max(0.25, parseFloat((servings - 0.25).toFixed(2)));
+                            setFoodServings(updated);
+                          }}
+                        >
+                          <Ionicons name="remove" size={16} color={C.teal} />
+                        </TouchableOpacity>
+                        <Text style={s.qtyValue}>{servings}×</Text>
+                        <TouchableOpacity
+                          style={s.qtyBtn}
+                          onPress={() => {
+                            const updated = [...foodServings];
+                            updated[idx] = parseFloat((servings + 0.25).toFixed(2));
+                            setFoodServings(updated);
+                          }}
+                        >
+                          <Ionicons name="add" size={16} color={C.teal} />
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                    <Text style={[s.foodCals, usingGrams && { color: C.success }]}>{itemCals}</Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            {/* Total + confirm */}
+            <View style={s.modalFooter}>
+              <View style={s.totalRow}>
+                <Text style={s.totalLabel}>Total Calories</Text>
+                <Text style={s.totalCals}>{totalCaloriesFromDetected} kcal</Text>
+              </View>
+              <TouchableOpacity
+                style={[s.confirmBtn, savingMeal && { opacity: 0.6 }]}
+                onPress={handleConfirmMealLog}
+                disabled={savingMeal}
+                activeOpacity={0.85}
+              >
+                {savingMeal
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={s.confirmBtnText}>Log This Meal ✓</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -660,4 +936,86 @@ const s = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 16,
   },
   voiceInterruptLabel: { color: C.white, fontSize: 11, fontWeight: '600' },
+
+  // ── Camera button ──────────────────────────────────────────────────────────────
+  cameraBtn: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: C.tealMuted, borderWidth: 1, borderColor: C.tealLight + '60',
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  // ── Food modal ─────────────────────────────────────────────────────────────────
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(11,31,58,0.55)',
+    justifyContent: 'flex-end',
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF', borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingTop: 20, paddingHorizontal: 20, paddingBottom: 32,
+    maxHeight: '88%',
+    shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.12, shadowRadius: 16, elevation: 20,
+  },
+  modalHeader: {
+    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14,
+  },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: C.navy },
+  modalSubtitle: { fontSize: 13, color: C.textSecondary, marginTop: 3, maxWidth: width - 100 },
+  modalClose: {
+    width: 32, height: 32, borderRadius: 16, backgroundColor: '#F1F5F9',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  photoThumb: {
+    width: '100%', height: 140, borderRadius: 16, marginBottom: 14,
+    backgroundColor: C.tealMuted,
+  },
+  mealTypeRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  mealTypeChip: {
+    flex: 1, paddingVertical: 8, borderRadius: 10,
+    backgroundColor: '#F1F5F9', alignItems: 'center',
+    borderWidth: 1, borderColor: '#E2E8F0',
+  },
+  mealTypeChipActive: { backgroundColor: C.teal, borderColor: C.teal },
+  mealTypeText: { fontSize: 12, fontWeight: '600', color: C.textSecondary },
+  mealTypeTextActive: { color: '#fff' },
+  foodList: { maxHeight: 240, marginBottom: 8 },
+  foodItem: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', gap: 8,
+  },
+  foodItemLeft: { flex: 1 },
+  foodName: { fontSize: 14, fontWeight: '700', color: C.navy },
+  foodQuantity: { fontSize: 12, color: C.textMuted, marginTop: 2 },
+  qtyControl: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: C.tealMuted, borderRadius: 10, paddingHorizontal: 6, paddingVertical: 4,
+  },
+  qtyBtn: { padding: 4 },
+  qtyValue: { fontSize: 14, fontWeight: '700', color: C.teal, minWidth: 32, textAlign: 'center' },
+  foodCals: { fontSize: 14, fontWeight: '700', color: C.teal, minWidth: 44, textAlign: 'right' },
+  gramsRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5,
+  },
+  gramsInput: {
+    flex: 1, height: 28, backgroundColor: '#F1F5F9', borderRadius: 8,
+    paddingHorizontal: 8, fontSize: 12, color: C.textPrimary,
+    borderWidth: 1, borderColor: '#E2E8F0',
+  },
+  gramsInputActive: {
+    backgroundColor: C.tealMuted, borderColor: C.tealLight,
+    color: C.tealDark, fontWeight: '700',
+  },
+  modalFooter: { marginTop: 16, gap: 12 },
+  totalRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    backgroundColor: C.tealMuted, borderRadius: 14, paddingHorizontal: 16, paddingVertical: 12,
+  },
+  totalLabel: { fontSize: 15, fontWeight: '600', color: C.textSecondary },
+  totalCals: { fontSize: 20, fontWeight: '800', color: C.teal },
+  confirmBtn: {
+    backgroundColor: C.teal, borderRadius: 16, paddingVertical: 16,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: C.teal, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
+  },
+  confirmBtnText: { color: '#fff', fontSize: 16, fontWeight: '800', letterSpacing: 0.3 },
 });
+

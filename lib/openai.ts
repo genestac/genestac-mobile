@@ -178,3 +178,93 @@ function getFallbackSummary(): ClinicalSummary {
     ]
   };
 }
+
+// ── Food Image Analysis (GPT-4o Vision) ────────────────────────────────────────
+
+export type FoodItem = {
+  name: string;
+  quantity: string;   // e.g. "1 cup", "2 pieces", "150g"
+  calories: number;
+  servingGrams: number; // grams per serving for quantity scaling
+};
+
+export type FoodImageAnalysisResult = {
+  items: FoodItem[];
+  totalCalories: number;
+  mealDescription: string; // one-line summary e.g. "Dal rice with raita"
+};
+
+export async function analyzeFoodImage(base64Image: string): Promise<FoodImageAnalysisResult> {
+  if (!API_KEY) {
+    return getFallbackFoodAnalysis();
+  }
+
+  try {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        max_tokens: 600,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: `You are a professional dietitian and food recognition AI. Analyze this meal photo carefully.
+Identify every distinct food item visible. For each item estimate:
+- A common name (in English, preferably Indian food names if applicable)
+- Visible quantity/portion (e.g. "1 medium bowl", "2 rotis", "150g", "1 cup")
+- Calorie estimate for that portion
+- Serving weight in grams for that portion (for quantity scaling)
+
+Then provide a brief one-line meal description.
+
+Return ONLY valid JSON, no markdown, no backticks:
+{
+  "items": [
+    {"name": "Dal (Yellow Lentil Curry)", "quantity": "1 medium bowl", "calories": 180, "servingGrams": 200},
+    {"name": "Steamed Rice", "quantity": "1 cup (cooked)", "calories": 206, "servingGrams": 186}
+  ],
+  "totalCalories": 386,
+  "mealDescription": "Dal rice — a nutritious Indian staple meal"
+}`
+              },
+              {
+                type: 'image_url',
+                image_url: { url: `data:image/jpeg;base64,${base64Image}`, detail: 'low' },
+              }
+            ]
+          }
+        ]
+      }),
+    });
+
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message);
+
+    let content = data.choices?.[0]?.message?.content?.trim() ?? '';
+    if (content.startsWith('```')) {
+      content = content.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+    }
+    const parsed = JSON.parse(content) as FoodImageAnalysisResult;
+    return parsed;
+  } catch (err) {
+    console.warn('[analyzeFoodImage] Error:', err);
+    return getFallbackFoodAnalysis();
+  }
+}
+
+function getFallbackFoodAnalysis(): FoodImageAnalysisResult {
+  return {
+    items: [
+      { name: 'Mixed Meal', quantity: '1 serving', calories: 350, servingGrams: 300 },
+    ],
+    totalCalories: 350,
+    mealDescription: 'Mixed meal (could not analyze image)',
+  };
+}

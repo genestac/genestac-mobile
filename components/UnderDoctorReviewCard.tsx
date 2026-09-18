@@ -13,11 +13,15 @@ import { HealthProfile } from "@/lib/types";
 interface UnderDoctorReviewCardProps {
   healthProfile?: HealthProfile;
   onEditProfile?: () => void;
+  onApprovePlan?: () => void;
+  approving?: boolean;
 }
 
 export const UnderDoctorReviewCard: React.FC<UnderDoctorReviewCardProps> = ({
   healthProfile,
   onEditProfile,
+  onApprovePlan,
+  approving = false,
 }) => {
   return (
     <View style={styles.cardContainer}>
@@ -90,6 +94,21 @@ export const UnderDoctorReviewCard: React.FC<UnderDoctorReviewCardProps> = ({
             </View>
           </View>
         </View>
+      )}
+
+      {/* Instant Approve / Unlock Button */}
+      {onApprovePlan && (
+        <TouchableOpacity
+          style={styles.demoApproveBtn}
+          onPress={onApprovePlan}
+          disabled={approving}
+        >
+          {approving ? (
+            <ActivityIndicator color="#FFFFFF" size="small" />
+          ) : (
+            <Text style={styles.demoApproveBtnText}>Approve & Unlock Diet Plan</Text>
+          )}
+        </TouchableOpacity>
       )}
     </View>
   );

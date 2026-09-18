@@ -22,6 +22,7 @@ import { supabase } from '@/lib/supabase';
 import { fetchUserJourney, fetchUserPlans, saveUserStepLog } from '@/lib/api';
 import { StepLog, WeightJourney } from '@/lib/types';
 import { Colors, Fonts, Spacing, Radius } from '@/constants/colors';
+import { getTodayStepsCount, initStepTracker } from '@/lib/stepTracker';
 
 const DEFAULT_GOAL = 10000;
 // How often we push live step updates to Supabase while the screen is open
@@ -134,8 +135,8 @@ export default function StepsScreen() {
 
     const subscribeToPedometer = async () => {
       try {
+        await initStepTracker();
         const isAvailable = await Pedometer.isAvailableAsync();
-        console.log('Pedometer available:', isAvailable); // TEMP: remove after testing
         if (!isMounted) return;
         setIsPedometerAvailable(isAvailable);
 
@@ -147,53 +148,19 @@ export default function StepsScreen() {
           return;
         }
 
-        // isAvailableAsync only confirms the sensor hardware exists — it does NOT
-        // confirm runtime permission (ACTIVITY_RECOGNITION on Android) has been
-        // granted. Without this explicit request, watchStepCount can silently
-        // receive zero events on Android even though everything "looks" available.
-        try {
-          const { status } = await Pedometer.requestPermissionsAsync();
-          console.log('Pedometer permission status:', status); // TEMP: remove after testing
-          if (status !== 'granted') {
-            console.warn('Pedometer permission not granted:', status);
-            if (isMounted) setIsPedometerAvailable(false);
-            return;
-          }
-        } catch (permErr) {
-          console.warn('Pedometer.requestPermissionsAsync failed:', permErr);
+        // Retrieve today's total steps from native layer (CMPedometer on iOS, StepTrackerModule on Android).
+        // If native step count is higher than Supabase baseline, update baseStepsRef.
+        const todayHardwareSteps = await getTodayStepsCount();
+        if (isMounted && todayHardwareSteps > baseStepsRef.current) {
+          baseStepsRef.current = todayHardwareSteps;
+          liveDeltaRef.current = 0;
+          setCurrentSteps(todayHardwareSteps);
         }
 
-        // 1. Get steps already taken today (before this screen/subscription started)
-        // NOTE: getStepCountAsync(start, end) — querying a historical date range —
-        // is only supported on iOS. Android's step counter sensor (TYPE_STEP_COUNTER)
-        // has no API for date-range queries, so calling this on Android always
-        // rejects with "Getting step count for date range is not supported on
-        // Android yet". On Android we just keep whatever baseline was already
-        // loaded from Supabase in loadUserData() (today's saved log) and let
-        // watchStepCount add live steps on top of that.
-        if (Platform.OS === 'ios') {
-          const start = new Date();
-          start.setHours(0, 0, 0, 0);
-          const end = new Date();
-
-          try {
-            const pastStepsResult = await Pedometer.getStepCountAsync(start, end);
-            if (isMounted) {
-              baseStepsRef.current = pastStepsResult.steps;
-              liveDeltaRef.current = 0;
-              setCurrentSteps(pastStepsResult.steps);
-            }
-          } catch (e) {
-            console.warn('Could not fetch past step count (getStepCountAsync):', e);
-          }
-        }
-
-        // 2. Subscribe to live step updates.
-        // result.steps from watchStepCount is a running delta counted
-        // SINCE the subscription started, not since midnight — so we add
-        // it on top of the baseline we already fetched above.
+        // Subscribe to live step updates.
+        // liveDeltaRef = steps taken SINCE this subscription started.
+        // Total shown = baseStepsRef (native/Supabase baseline) + liveDeltaRef (new steps).
         subscription = Pedometer.watchStepCount(result => {
-          // console.log('watchStepCount fired:', result.steps);
           liveDeltaRef.current = result.steps;
           const total = baseStepsRef.current + liveDeltaRef.current;
           if (isMounted) setCurrentSteps(total);
@@ -215,7 +182,7 @@ export default function StepsScreen() {
   useEffect(() => {
     const interval = setInterval(() => {
       const total = baseStepsRef.current + liveDeltaRef.current;
-      // Only push if it actually changed since the last sync (avoid spamming writes)
+      // Only push if it actually changed since the last sync
       if (total !== lastSyncedStepsRef.current && userIdRef.current) {
         syncStepsToSupabase(total, stepGoalRef.current);
       }
@@ -224,10 +191,27 @@ export default function StepsScreen() {
     return () => clearInterval(interval);
   }, [syncStepsToSupabase]);
 
-  // Also sync when the app goes to background, so steps aren't lost if the user closes the app
+  // Sync when returning to foreground or going to background
   useEffect(() => {
-    const handleAppStateChange = (nextState: AppStateStatus) => {
-      if (nextState === 'background' || nextState === 'inactive') {
+    const handleAppStateChange = async (nextState: AppStateStatus) => {
+      if (nextState === 'active') {
+        // Returned to foreground — query native hardware layer for steps taken while app was closed/backgrounded
+        const latestSteps = await getTodayStepsCount();
+        if (latestSteps > 0 && latestSteps > baseStepsRef.current + liveDeltaRef.current) {
+          baseStepsRef.current = latestSteps;
+          liveDeltaRef.current = 0;
+          setCurrentSteps(latestSteps);
+          if (userIdRef.current) {
+            syncStepsToSupabase(latestSteps, stepGoalRef.current);
+          }
+        } else {
+          // Sync current accumulated total to Supabase
+          const total = baseStepsRef.current + liveDeltaRef.current;
+          if (total !== lastSyncedStepsRef.current && userIdRef.current) {
+            syncStepsToSupabase(total, stepGoalRef.current);
+          }
+        }
+      } else if (nextState === 'background' || nextState === 'inactive') {
         const total = baseStepsRef.current + liveDeltaRef.current;
         if (total !== lastSyncedStepsRef.current && userIdRef.current) {
           syncStepsToSupabase(total, stepGoalRef.current);

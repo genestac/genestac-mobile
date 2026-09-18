@@ -1064,8 +1064,8 @@ export default function DietScreen() {
     );
   }
 
-  const todayPlan = dietPlan?.[selectedDay] || dietPlan;
-  const meals = Array.isArray(todayPlan) ? todayPlan : [];
+  const todayPlan = getDayPlan(dietPlan, selectedDay);
+  const meals = parseMeals(todayPlan);
 
   return (
     <SafeAreaView style={s.flex} edges={["top", "left", "right"]}>
@@ -1114,6 +1114,8 @@ export default function DietScreen() {
           <UnderDoctorReviewCard
             healthProfile={healthProfile || undefined}
             onEditProfile={() => setShowProfileModal(true)}
+            onApprovePlan={handleApproveDemo}
+            approving={approving}
           />
         ) : (
           <>

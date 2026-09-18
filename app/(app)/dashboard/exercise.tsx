@@ -823,6 +823,8 @@ export default function ExerciseScreen() {
           <UnderDoctorReviewCard
             healthProfile={healthProfile || undefined}
             onEditProfile={() => setShowProfileModal(true)}
+            onApprovePlan={handleApproveDemo}
+            approving={approving}
           />
         ) : (
           <>

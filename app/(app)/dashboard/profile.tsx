@@ -357,7 +357,7 @@ export default function ProfileScreen() {
           <Text style={s.sectionTitle}>Rewards & Referrals</Text>
           <TouchableOpacity
             style={s.fieldRow}
-            onPress={() => router.push("/(app)/referral")}
+            onPress={() => router.push("/(app)/dashboard/referral")}
           >
             <Ionicons
               name="gift-outline"
@@ -463,7 +463,7 @@ export default function ProfileScreen() {
                 style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
               >
                 <Image
-                  source={require("../../assets/images/brand/logo.png")}
+                  source={require("@/assets/images/brand/logo.png")}
                   style={{ width: 70, height: 60, resizeMode: "contain" }}
                 />
               </View>

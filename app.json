@@ -27,7 +27,11 @@
       "package": "com.genestac.app",
       "permissions": [
         "ACTIVITY_RECOGNITION",
-        "CAMERA"
+        "CAMERA",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_HEALTH",
+        "RECEIVE_BOOT_COMPLETED",
+        "POST_NOTIFICATIONS"
       ],
       "blockedPermissions": [
         "android.permission.READ_MEDIA_IMAGES",

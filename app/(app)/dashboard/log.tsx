@@ -292,7 +292,7 @@ export default function LogScreen() {
             </Text>
             <TouchableOpacity
               style={styles.primaryBtn}
-              onPress={() => router.push('/(app)/steps')}
+              onPress={() => router.push('/(app)/dashboard/steps')}
             >
               <Text style={styles.primaryBtnText}>Open Live Step Tracker</Text>
             </TouchableOpacity>

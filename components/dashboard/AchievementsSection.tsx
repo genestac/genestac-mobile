@@ -235,7 +235,7 @@ export const AchievementsSection: React.FC<AchievementsSectionProps> = ({ lostKg
       {/* View All Badges & Milestones Button */}
       <TouchableOpacity
         style={styles.viewAllBtn}
-        onPress={() => router.push("/(app)/badges")}
+        onPress={() => router.push("/(app)/dashboard/badges")}
         activeOpacity={0.8}
       >
         <Text style={styles.viewAllBtnText}>View All Badges & Achievements</Text>

@@ -67,7 +67,7 @@ export function FastingWidget() {
 
         <TouchableOpacity
           style={styles.actionBtn}
-          onPress={() => router.push('/fasting')}
+          onPress={() => router.push('/(app)/dashboard/fasting')}
           activeOpacity={0.85}
         >
           <Text style={styles.actionBtnText}>

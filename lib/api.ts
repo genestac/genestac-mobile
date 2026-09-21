@@ -85,14 +85,7 @@ export async function fetchUserPlans(userId: string): Promise<UserPlan | null> {
 // 3b. Save / Update User Plans & History directly in Supabase
 export async function saveUserPlans(userId: string, updates: Partial<UserPlan>): Promise<boolean> {
   try {
-    // Obtain active session user ID if available
-    const { data: authData } = await supabase.auth.getUser();
-    const effectiveUserId = authData?.user?.id || userId;
-
-    let planSaved = false;
-
-    // 1. Try updating or inserting into user_plans table
-    const existing = await fetchUserPlans(effectiveUserId);
+    const existing = await fetchUserPlans(userId);
     if (existing && existing.id) {
       const { error } = await supabase
         .from('user_plans')
@@ -102,10 +95,9 @@ export async function saveUserPlans(userId: string, updates: Partial<UserPlan>):
         })
         .eq('id', existing.id);
 
-      if (!error) {
-        planSaved = true;
-      } else {
-        console.warn('Warning updating user_plans in Supabase:', error.message || error);
+      if (error) {
+        console.error('Error updating user_plans in Supabase:', error);
+        return false;
       }
     } else {
       const { error } = await supabase
@@ -707,12 +699,8 @@ export async function saveUserStepLog(
   customGoal?: number
 ): Promise<boolean> {
   try {
-    const [userPlan, journey] = await Promise.all([
-      fetchUserPlans(userId),
-      fetchUserJourney(userId),
-    ]);
-
-    const stepsHistory = userPlan?.steps_history || journey?.stepLogs || [];
+    const userPlan = await fetchUserPlans(userId);
+    const stepsHistory = userPlan?.steps_history || [];
     const todayStr = todayLog.date.split('T')[0];
 
     const existingIdx = stepsHistory.findIndex(s => s.date.split('T')[0] === todayStr);
@@ -729,18 +717,17 @@ export async function saveUserStepLog(
       updatedStepLogs = [{ ...todayLog, date: todayStr }, ...stepsHistory];
     }
 
-    // Save steps_history in user_plans (which also dual-syncs to weight_loss_journey)
+    // Save steps_history in user_plans
     const planSuccess = await saveUserPlans(userId, { steps_history: updatedStepLogs });
 
-    // Update weight_loss_journey stepLogs and stepGoal directly
-    const currentJourney = journey || { history: [] };
-    const journeySuccess = await saveUserJourney(userId, {
-      ...currentJourney,
-      stepLogs: updatedStepLogs,
-      ...(customGoal ? { stepGoal: customGoal } : {}),
-    });
+    // Optionally update stepGoal in weight_loss_journey if specified
+    if (customGoal) {
+      const journey = await fetchUserJourney(userId);
+      const currentJourney = journey || { history: [] };
+      await saveUserJourney(userId, { ...currentJourney, stepGoal: customGoal });
+    }
 
-    return planSuccess || journeySuccess;
+    return planSuccess;
   } catch (err) {
     console.error('Failed to save step log to Supabase:', err);
     return false;

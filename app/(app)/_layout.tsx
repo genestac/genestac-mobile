@@ -8,12 +8,41 @@ import { Colors } from "@/constants/colors";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Platform, TouchableOpacity, Alert, Modal } from "react-native";
 
-import { syncAllNotifications } from "@/lib/notifications";
-import {
-  checkUserSubscription,
-  UserSubscriptionStatus,
-} from "@/lib/subscriptions";
-import { PricingModal } from "@/components/PricingModal";
+import { syncAllNotifications } from '@/lib/notifications';
+import { registerExpoPushToken } from '@/lib/pushToken';
+
+const CRM_URL = process.env.EXPO_PUBLIC_CRM_API_URL ?? '';
+
+/** Report to backend when user taps a push notification */
+async function trackNotificationOpen(notificationId: string, screen?: string) {
+  if (!notificationId || !CRM_URL) return;
+  try {
+    await fetch(`${CRM_URL}/api/admin/push-notifications/track-open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notification_id: notificationId, screen }),
+    });
+  } catch { }
+}
+
+function TabIcon({ name, focused, label }: { name: any; focused: boolean; label: string }) {
+  return (
+    <View style={styles.tabItem}>
+      <Ionicons
+        name={focused ? name : `${name}-outline`}
+        size={20}
+        color={focused ? Colors.primaryLight : Colors.textMuted}
+      />
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        style={[styles.tabLabel, focused && styles.tabLabelActive]}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
 
 export default function AppLayout() {
   const [checking, setChecking] = useState(true);
@@ -32,34 +61,43 @@ export default function AppLayout() {
           router.replace("/(auth)/login");
         }, 0);
       } else {
-        const {
-          getNotificationPreferences,
-        } = require("@/lib/notificationStorage");
-        getNotificationPreferences()
-          .then(syncAllNotifications)
-          .catch(console.error);
-        try {
-          const status = await checkUserSubscription(session.user.id);
-          setSubStatus(status);
-        } catch (err) {
-          console.error("Layout sub check failed:", err);
-        }
+        const { getNotificationPreferences } = require('@/lib/notificationStorage');
+        getNotificationPreferences().then(syncAllNotifications).catch(console.error);
+        // Register Expo push token with backend so AI Health Coach can send notifications
+        registerExpoPushToken().catch(console.warn);
       }
       setChecking(false);
     };
     checkAuth();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        if (!session) {
-          setTimeout(() => {
-            router.replace("/(auth)/login");
-          }, 0);
+    // Listen for notification taps → report open event to backend for analytics
+    let notifSub: any = null;
+    try {
+      const Notifications = require('expo-notifications');
+      notifSub = Notifications.addNotificationResponseReceivedListener((response: any) => {
+        const notifData = response?.notification?.request?.content?.data ?? {};
+        const notifId = response?.notification?.request?.identifier;
+        const screen = notifData?.screen;
+        if (notifId) trackNotificationOpen(notifId, screen);
+        // Deep link: navigate to screen if specified
+        if (screen) {
+          try { router.push(`/(app)/${screen}` as any); } catch { }
         }
-      },
-    );
+      });
+    } catch { }
 
-    return () => listener.subscription.unsubscribe();
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        setTimeout(() => {
+          router.replace('/(auth)/login');
+        }, 0);
+      }
+    });
+
+    return () => {
+      listener.subscription.unsubscribe();
+      notifSub?.remove?.();
+    };
   }, []);
 
   if (checking) return null;
@@ -140,7 +178,84 @@ export default function AppLayout() {
           }
         }}
       />
-    </View>
+      <Tabs.Screen
+        name="log"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="add-circle" focused={focused} label="Log" />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="diet"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="restaurant" focused={focused} label="Diet" />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="exercise"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="barbell" focused={focused} label="Exercise" />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="steps"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="walk" focused={focused} label="Steps" />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="referral"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="gift" focused={focused} label="Refer" />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="person" focused={focused} label="Profile" />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="badges"
+        options={{
+          href: null,
+        }}
+      />
+      {/* AI Health coach Welcome */}
+      <Tabs.Screen
+        name="ai-doctor-welcome"
+        options={{
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name="medkit" focused={focused} label="AI Doc" />
+          ),
+        }}
+      />
+      {/* AI Health coach Form (Hidden from Tab Bar) */}
+      <Tabs.Screen
+        name="ai-doctor"
+        options={{
+          href: null,
+        }}
+      />
+      {/* AI Health Coach Chat — Sarvam AI (Hidden from Tab Bar) */}
+      <Tabs.Screen
+        name="ai-doctor-chat"
+        options={{
+          href: null,
+        }}
+      />
+    </Tabs>
   );
 }
 
@@ -175,11 +290,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 16,
   },
-  expiredLockTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: "#0F172A",
-    marginBottom: 8,
+  tabLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.textMuted,
+    marginTop: 1,
+    textAlign: 'center',
+    letterSpacing: -0.1,
   },
   expiredLockText: {
     fontSize: 15,

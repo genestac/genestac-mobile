@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Genestac",
-    "slug": "genestac-mobile",
+    "slug": "genestac-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icons/icon.png",

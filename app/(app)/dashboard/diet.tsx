@@ -1064,8 +1064,8 @@ export default function DietScreen() {
     );
   }
 
-  const todayPlan = getDayPlan(dietPlan, selectedDay);
-  const meals = parseMeals(todayPlan);
+  const todayPlan = dietPlan?.[selectedDay] || dietPlan;
+  const meals = Array.isArray(todayPlan) ? todayPlan : [];
 
   return (
     <SafeAreaView style={s.flex} edges={["top", "left", "right"]}>

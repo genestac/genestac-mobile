@@ -14,7 +14,48 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { router } from "expo-router";
 import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
-import TopNavbar from "@/components/dashboard/TopNavbar";
+import { Colors, Fonts, Spacing, Radius } from "@/constants/colors";
+import {
+  WeightJourney,
+  WeightLog,
+  MealLog,
+  WaterLog,
+  SleepLog,
+  MeasurementLog,
+  HabitLog,
+  BloodTestRequest,
+} from "@/lib/types";
+import {
+  fetchUserPlans,
+  saveUserWaterHistory,
+  saveUserSleepHistory,
+  saveUserMeasurementHistory,
+  fetchTestRequests,
+  createBloodTestRequest,
+  recommendMeals,
+  recommendSleep,
+  uploadToCloudinary,
+  RecipeRecommendation,
+  SleepRecommendation,
+} from "@/lib/api";
+import { LineChart } from "react-native-chart-kit";
+import { GaugeMeter } from "@/components/dashboard/GaugeMeter";
+import { CurrentStatsCards } from "@/components/dashboard/CurrentStatsCards";
+import { WeightLossChart } from "@/components/dashboard/WeightLossChart";
+import { TransformationGallery } from "@/components/dashboard/TransformationGallery";
+import { TopNavbar } from "@/components/dashboard/TopNavbar";
+import { SidebarNav } from "@/components/dashboard/SidebarNav";
+import { WaterTrackerWidget } from "@/components/dashboard/WaterTrackerWidget";
+import { SleepTrackerWidget } from "@/components/dashboard/SleepTrackerWidget";
+import { HealthyRecipesWidget } from "@/components/dashboard/HealthyRecipesWidget";
+import { BloodTestWidget } from "@/components/dashboard/BloodTestWidget";
+import { BodyMeasurementsWidget } from "@/components/dashboard/BodyMeasurementsWidget";
+import { HabitsChecklistWidget } from "@/components/dashboard/HabitsChecklistWidget";
+import { HistoryModal, HistoryType } from "@/components/dashboard/HistoryModal";
+import { AchievementsSection } from "@/components/dashboard/AchievementsSection";
+import { FastingWidget } from "@/components/dashboard/FastingWidget";
+import { checkUserSubscription, UserSubscriptionStatus } from "@/lib/subscriptions";
+import { PricingModal } from "@/components/PricingModal";
 
 const CATEGORIES = [
   {
@@ -543,6 +584,24 @@ export default function CategoryHubScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* History Modal Popup */}
+      <HistoryModal
+        visible={activeHistoryType !== null}
+        onClose={() => setActiveHistoryType(null)}
+        type={activeHistoryType}
+        waterLogs={journey.waterLogs}
+        sleepLogs={journey.sleepLogs}
+        measurementLogs={journey.measurements}
+        habitLogs={journey.habitLogs}
+      />
+
+      {/* Pricing / AutoPay Modal */}
+      <PricingModal
+        visible={showPricingModal}
+        onClose={() => setShowPricingModal(false)}
+        onSubscribeSuccess={load}
+      />
     </View>
   );
 }
@@ -1029,6 +1088,54 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#FFFFFF",
   },
+  headerAddMealBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    backgroundColor: "#EFF6FF",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+  },
+  headerAddMealBtnText: {
+    fontSize: Fonts.sizes.xs,
+    fontWeight: "700",
+    color: "#2563EB",
+  },
+  expiryBannerContainer: {
+    backgroundColor: "#FEF3C7",
+    borderBottomWidth: 1,
+    borderBottomColor: "#FDE68A",
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    zIndex: 10,
+  },
+  expiryBannerContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  expiryBannerTitle: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#92400E",
+  },
+  expiryBannerSub: {
+    fontSize: 11,
+    color: "#B45309",
+    marginTop: 2,
+  },
+  expiryBannerBtn: {
+    backgroundColor: "#D97706",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  expiryBannerBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
 });
-
-

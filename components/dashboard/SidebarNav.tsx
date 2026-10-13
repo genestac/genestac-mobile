@@ -5,12 +5,14 @@ import { Ionicons } from "@expo/vector-icons";
 interface SidebarNavProps {
   userName: string;
   userEmail: string;
+  userId?: string;
   onSignOut: () => void;
 }
 
 export const SidebarNav: React.FC<SidebarNavProps> = ({
   userName,
   userEmail,
+  userId,
   onSignOut,
 }) => {
   return (
@@ -18,7 +20,9 @@ export const SidebarNav: React.FC<SidebarNavProps> = ({
       <View style={styles.sidebarUserBox}>
         <Text style={styles.sidebarUserName}>{userName}</Text>
         <Text style={styles.sidebarUserEmail}>{userEmail}</Text>
-        <Text style={styles.sidebarUserId}>ID: #GEN-84920</Text>
+        <Text style={styles.sidebarUserId}>
+          ID: #{userId ? userId.slice(0, 8).toUpperCase() : "GENESTAC"}
+        </Text>
       </View>
 
       <View style={styles.sidebarNavList}>

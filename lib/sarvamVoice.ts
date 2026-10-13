@@ -3,8 +3,7 @@
 // Sarvam handles ALL of: STT, LLM, TTS.
 // We stream audio bytes TO Sarvam, and receive + play audio bytes FROM Sarvam.
 
-import { Audio } from 'expo-av';
-import { File, Paths } from 'expo-file-system';
+import { File } from 'expo-file-system';
 
 const SARVAM_API_KEY = process.env.EXPO_PUBLIC_SARVAM_API_KEY ?? '';
 const SARVAM_ORG_ID = process.env.EXPO_PUBLIC_SARVAM_ORG_ID ?? '';
@@ -14,6 +13,15 @@ const SARVAM_APP_VERSION = parseInt(process.env.EXPO_PUBLIC_SARVAM_APP_VERSION ?
 
 // Sarvam app-runtime WebSocket (same backend used by sarvamconv_ai_sdk Flutter SDK)
 const SARVAM_WS_BASE = 'wss://apps.sarvam.ai/api/app-runtime';
+
+function getExpoAudio() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('expo-audio');
+  } catch {
+    return null;
+  }
+}
 
 export type VoiceAgentStatus =
   | 'idle' | 'connecting' | 'connected'
@@ -29,8 +37,8 @@ export type VoiceAgentCallbacks = {
 
 export class SarvamVoiceAgent {
   private ws: WebSocket | null = null;
-  private recording: Audio.Recording | null = null;
-  private sound: Audio.Sound | null = null;
+  private recorder: any = null;
+  private sound: any = null;
   private callbacks: VoiceAgentCallbacks;
   private userIdentifier: string;
   private agentVariables: Record<string, string>;
@@ -56,29 +64,37 @@ export class SarvamVoiceAgent {
   async connect() {
     if (this.ws) return;
 
-    const { granted } = await Audio.requestPermissionsAsync();
-    if (!granted) {
-      this.callbacks.onError('Microphone permission denied');
+    const expoAudio = getExpoAudio();
+    if (!expoAudio) {
+      console.warn('[SarvamVoice] expo-audio native module is unavailable in this build (e.g. Expo Go).');
+      this.callbacks.onError('Voice feature requires a development build (npx expo run:android / ios).');
+      this.setStatus('error');
       return;
     }
 
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
-    });
+    const { AudioModule } = expoAudio;
+
+    try {
+      const { granted } = await AudioModule.requestRecordingPermissionsAsync();
+      if (!granted) {
+        this.callbacks.onError('Microphone permission denied');
+        return;
+      }
+
+      await AudioModule.setAudioModeAsync({
+        allowsRecording: true,
+        playsInSilentMode: true,
+      });
+    } catch (e) {
+      console.warn('[SarvamVoice] Permission error:', e);
+      this.callbacks.onError('Microphone permission or audio mode error.');
+      this.setStatus('error');
+      return;
+    }
 
     this.setStatus('connecting');
 
     const wsUrl = `${SARVAM_WS_BASE}/${SARVAM_ORG_ID}/${SARVAM_WORKSPACE_ID}/${SARVAM_APP_ID}`;
-
-    // ── Debug: log credentials being used ────────────────────────────────────
-    console.log('[SarvamVoice] Connecting to:', wsUrl);
-    console.log('[SarvamVoice] API key prefix:', SARVAM_API_KEY?.slice(0, 20) || '(empty!)');
-    console.log('[SarvamVoice] ORG_ID:', SARVAM_ORG_ID || '(empty!)');
-    console.log('[SarvamVoice] WORKSPACE_ID:', SARVAM_WORKSPACE_ID || '(empty!)');
-    console.log('[SarvamVoice] APP_ID:', SARVAM_APP_ID || '(empty!)');
-    console.log('[SarvamVoice] APP_VERSION:', SARVAM_APP_VERSION);
 
     if (!SARVAM_API_KEY || !SARVAM_ORG_ID || !SARVAM_WORKSPACE_ID || !SARVAM_APP_ID) {
       const missing = [
@@ -104,7 +120,6 @@ export class SarvamVoiceAgent {
     this.ws.binaryType = 'arraybuffer';
 
     this.ws.onopen = () => {
-      console.log('[SarvamVoice] WebSocket opened — sending interaction.start');
       this.ws?.send(JSON.stringify({
         type: 'interaction.start',
         interaction: { type: 'call', sample_rate: 16000, app_version: SARVAM_APP_VERSION },
@@ -171,31 +186,13 @@ export class SarvamVoiceAgent {
   }
 
   private async _startRecording() {
+    const expoAudio = getExpoAudio();
+    if (!expoAudio) return;
+    const { AudioRecorder, RecordingPresets } = expoAudio;
+
     try {
-      this.recording = new Audio.Recording();
-      await this.recording.prepareToRecordAsync({
-        android: {
-          extension: '.wav',
-          outputFormat: Audio.AndroidOutputFormat.DEFAULT,
-          audioEncoder: Audio.AndroidAudioEncoder.DEFAULT,
-          sampleRate: 16000,
-          numberOfChannels: 1,
-          bitRate: 256000,
-        },
-        ios: {
-          extension: '.wav',
-          outputFormat: Audio.IOSOutputFormat.LINEARPCM,
-          audioQuality: Audio.IOSAudioQuality.HIGH,
-          sampleRate: 16000,
-          numberOfChannels: 1,
-          bitRate: 256000,
-          linearPCMBitDepth: 16,
-          linearPCMIsBigEndian: false,
-          linearPCMIsFloat: false,
-        },
-        web: {},
-      });
-      await this.recording.startAsync();
+      this.recorder = new AudioRecorder(RecordingPresets.HIGH_QUALITY);
+      this.recorder.record();
       this.lastSentSize = 0;
       this.setStatus('listening');
 
@@ -208,19 +205,17 @@ export class SarvamVoiceAgent {
   }
 
   private async _streamAudioDelta() {
-    if (!this.recording || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    if (!this.recorder || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
     try {
-      const uri = this.recording.getURI();
+      const uri = this.recorder.uri;
       if (!uri) return;
 
-      // Use new expo-file-system File class
       const file = new File(uri);
       if (!file.exists) return;
-      
+
       const buf = await file.arrayBuffer();
       if (buf.byteLength <= this.lastSentSize) return;
 
-      // Send only the new bytes since last send
       const newBytes = buf.slice(this.lastSentSize);
       this.lastSentSize = buf.byteLength;
       this.ws.send(newBytes);
@@ -234,47 +229,36 @@ export class SarvamVoiceAgent {
       clearInterval(this.audioChunkInterval);
       this.audioChunkInterval = null;
     }
-    if (this.recording) {
-      try { await this.recording.stopAndUnloadAsync(); } catch {}
-      this.recording = null;
+    if (this.recorder) {
+      try { await this.recorder.stop(); } catch {}
+      this.recorder = null;
     }
     this.lastSentSize = 0;
   }
 
   private async _playAudioBuffer(buffer: ArrayBuffer) {
+    const expoAudio = getExpoAudio();
+    if (!expoAudio) return;
+    const { createAudioPlayer } = expoAudio;
+
     try {
-      // Write received TTS audio to a temp cache file
-      const tempFile = new File(Paths.cache, `sarvam_tts_${Date.now()}.wav`);
-      
-      // Write as Uint8Array
       const bytes = new Uint8Array(buffer);
       let binary = '';
       const chunk = 1024;
       for (let i = 0; i < bytes.length; i += chunk) {
         binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
       }
-      // Use base64 write via the legacy compatible path
       const base64 = btoa(binary);
-      
-      // Fallback: use a data URI approach since new API may not support write
       const uri = `data:audio/wav;base64,${base64}`;
 
       if (this.sound) {
-        await this.sound.unloadAsync().catch(() => {});
+        try { this.sound.pause(); } catch {}
         this.sound = null;
       }
 
-      const { sound } = await Audio.Sound.createAsync(
-        { uri },
-        { shouldPlay: true, volume: 1.0 }
-      );
-      this.sound = sound;
-      sound.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          sound.unloadAsync().catch(() => {});
-          this.sound = null;
-        }
-      });
+      const player = createAudioPlayer({ uri });
+      this.sound = player;
+      player.play();
     } catch (e) {
       console.warn('[SarvamVoice] Playback error:', e);
     }
@@ -284,13 +268,13 @@ export class SarvamVoiceAgent {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'user.interrupt' }));
     }
-    this.sound?.stopAsync().catch(() => {});
+    try { this.sound?.pause(); } catch {}
   }
 
   async disconnect() {
     await this._stopRecording();
     if (this.sound) {
-      await this.sound.unloadAsync().catch(() => {});
+      try { this.sound.pause(); } catch {}
       this.sound = null;
     }
     if (this.ws) {
@@ -298,7 +282,10 @@ export class SarvamVoiceAgent {
       this.ws = null;
     }
     if (this.status !== 'error' && this.status !== 'ended') this.setStatus('idle');
-    await Audio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
+    const expoAudio = getExpoAudio();
+    if (expoAudio?.AudioModule) {
+      await expoAudio.AudioModule.setAudioModeAsync({ allowsRecording: false }).catch(() => {});
+    }
   }
 
   getStatus() { return this.status; }

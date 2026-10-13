@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useURL } from 'expo-linking';
 import { supabase } from '@/lib/supabase';
 import { Colors } from '@/constants/colors';
+import { fetchUserPrimaryGoal, getRouteForPrimaryGoal } from '@/lib/primaryGoal';
 
 /**
  * OAuth deep-link callback screen.
@@ -55,7 +56,9 @@ export default function AuthCallback() {
               },
               { onConflict: 'id', ignoreDuplicates: true }
             );
-            router.replace('/(app)');
+            const goal = await fetchUserPrimaryGoal(u.id);
+            const destination = getRouteForPrimaryGoal(goal);
+            router.replace(destination as any);
             return;
           }
         }

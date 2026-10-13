@@ -277,7 +277,6 @@ export async function sendInvoiceEmail(invoice: InvoiceData): Promise<boolean> {
 
     const data = await res.json();
     if (res.ok) {
-      console.log('Invoice email sent via Resend:', data.id);
       return true;
     } else {
       console.error('Resend API Error (Email dispatch failed):', res.status, data);
@@ -401,7 +400,6 @@ export async function sendRegistrationOtpEmail(params: {
 
     const resData = await res.json();
     if (res.ok) {
-      console.log('OTP email sent via Resend:', resData.id);
       return { success: true, otp };
     } else {
       console.error('Resend API Error (OTP dispatch failed):', res.status, resData);

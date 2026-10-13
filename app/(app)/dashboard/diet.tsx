@@ -966,7 +966,7 @@ function MealCardItem({ meal }: { meal: ParsedMeal }) {
   );
 }
 
-export default function DietScreen() {
+export function DietContent({ embedded = false }: { embedded?: boolean }) {
 
   const [dietPlan, setDietPlan] = useState<any>(null);
   const [healthProfile, setHealthProfile] = useState<HealthProfile | null>(null);
@@ -1056,19 +1056,22 @@ export default function DietScreen() {
     }
   };
 
+  const Container = embedded ? View : SafeAreaView;
+  const containerEdges = embedded ? undefined : (["top", "left", "right"] as const);
+
   if (loading) {
     return (
-      <SafeAreaView style={s.center} edges={["top", "left", "right"]}>
+      <Container style={s.center} edges={containerEdges as any}>
         <ActivityIndicator color={Colors.primaryLight} size="large" />
-      </SafeAreaView>
+      </Container>
     );
   }
 
-  const todayPlan = dietPlan?.[selectedDay] || dietPlan;
-  const meals = Array.isArray(todayPlan) ? todayPlan : [];
+  const todayPlan = getDayPlan(dietPlan, selectedDay);
+  const meals = parseMeals(todayPlan);
 
   return (
-    <SafeAreaView style={s.flex} edges={["top", "left", "right"]}>
+    <Container style={s.flex} edges={containerEdges as any}>
       <HealthProfileModal
         visible={showProfileModal}
         onClose={() => setShowProfileModal(false)}
@@ -1213,8 +1216,12 @@ export default function DietScreen() {
 
         <View style={{ height: 28 }} />
       </ScrollView>
-    </SafeAreaView>
+    </Container>
   );
+}
+
+export default function DietScreen() {
+  return <DietContent embedded={false} />;
 }
 
 

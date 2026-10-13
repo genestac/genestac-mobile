@@ -48,7 +48,7 @@ export async function fetchMobilePlans(): Promise<Record<string, RazorpayPlan>> 
       title: plan.name,
       amountRupees: Number(plan.price),
       amountPaise: Math.round(Number(plan.price) * 100),
-      days: plan.duration_value || 30, // Fallback to 30 if null
+      days: plan.duration_value || 30,
 
       description: plan.description || '',
       term: plan.term || '',
@@ -195,7 +195,7 @@ async function createRazorpaySubscription(
         notes: { user_id: userId },
         addons: [{
           item: {
-            name: 'Trial Access',
+            name: '1 Month Trial Access',
             amount: plan.amountPaise,
             currency: 'INR'
           }

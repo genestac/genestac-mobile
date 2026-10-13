@@ -1,25 +1,57 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import TopNavbar from "@/components/dashboard/TopNavbar";
 import { CategoryCards } from "@/components/CategoryCards";
 import { LONGEVITY_SECTIONS } from "@/constants/longevityPlans";
+import { VerticalGoalBottomNav } from "@/components/dashboard/VerticalGoalBottomNav";
+import { getPrimaryGoalInfo, fetchUserPrimaryGoal } from "@/lib/primaryGoal";
+import { supabase } from "@/lib/supabase";
 
 export default function LongevityScreen() {
+  const [isUserPrimaryGoal, setIsUserPrimaryGoal] = useState(false);
+  const goalInfo = getPrimaryGoalInfo("Longevity");
+
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const goal = await fetchUserPrimaryGoal(session.user.id);
+        const isGoal = !!goal && goal.toLowerCase().includes("longevity");
+        setIsUserPrimaryGoal(isGoal);
+      }
+    });
+  }, []);
+
   return (
     <View style={styles.rootContainer}>
       <TopNavbar userName="User" />
       <View style={styles.subHeaderNavRow}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.push("/(app)")}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="arrow-back" size={20} color="#0F172A" />
-          <Text style={styles.backButtonText}>Back</Text>
-        </TouchableOpacity>
+        {!isUserPrimaryGoal ? (
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.push("/(app)")}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={20} color="#0F172A" />
+            <Text style={styles.backButtonText}>Back</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 8 }} />
+        )}
         <Text style={styles.headerCategoryTitle}>Longevity</Text>
+        {isUserPrimaryGoal ? (
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.push("/(app)/dashboard/profile")}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="person-outline" size={16} color="#4F46E5" />
+            <Text style={[styles.backButtonText, { color: "#4F46E5" }]}>Profile</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 8 }} />
+        )}
       </View>
       <CategoryCards
         categoryTitle="Longevity & Anti-Aging"
@@ -31,6 +63,9 @@ export default function LongevityScreen() {
         productsIcon="cart"
         structuredSections={LONGEVITY_SECTIONS}
       />
+      {isUserPrimaryGoal && (
+        <VerticalGoalBottomNav goal={goalInfo} activeTab="goal" />
+      )}
     </View>
   );
 }

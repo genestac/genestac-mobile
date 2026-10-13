@@ -153,6 +153,8 @@ export async function setupNotificationChannels(): Promise<void> {
   }
 }
 
+let activeSyncPromise: Promise<void> | null = null;
+
 /**
  * Synchronize local notification schedules with user preferences
  */
@@ -161,162 +163,182 @@ export async function syncAllNotifications(
 ): Promise<void> {
   const Notifications = getNotificationsModule();
   if (!Notifications) {
-    console.log('[Notifications] Native notification module is not active in current build.');
     return;
   }
 
-  try {
-    // 1. Clear existing schedules first
-    await Notifications.cancelAllScheduledNotificationsAsync();
-
-    // Check permissions
-    const hasPermission = await requestNotificationPermissions();
-    if (!hasPermission) {
-      console.log('Notification permission not granted.');
-      return;
+  // Prevent concurrent execution: wait if a sync operation is already running
+  while (activeSyncPromise) {
+    try {
+      await activeSyncPromise;
+    } catch {
+      // Ignore error from previous run
     }
+  }
 
-    await setupNotificationChannels();
+  activeSyncPromise = (async () => {
+    try {
+      // 1. Clear existing scheduled notifications first
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      // Brief pause to allow OS background scheduler to finish purge
+      await new Promise((res) => setTimeout(res, 100));
 
-    // 2. Schedule Water Intake Reminders (7:00 AM to 10:00 PM)
-    if (prefs.waterRemindersEnabled && prefs.waterIntervalHours > 0) {
-      const start = prefs.waterStartHour ?? 7;
-      const end = prefs.waterEndHour ?? 22;
-      const step = prefs.waterIntervalHours;
+      // Check permissions
+      const hasPermission = await requestNotificationPermissions();
+      if (!hasPermission) {
+        return;
+      }
 
-      for (let hour = start; hour <= end; hour += step) {
+      await setupNotificationChannels();
+
+      // 2. Schedule Water Intake Reminders (7:15 AM to 10:15 PM)
+      // Minute offset: :15 past the hour (avoids top-of-hour :00 and step :50 collisions)
+      if (prefs.waterRemindersEnabled && prefs.waterIntervalHours > 0) {
+        const start = prefs.waterStartHour ?? 7;
+        const end = prefs.waterEndHour ?? 22;
+        const step = prefs.waterIntervalHours;
+
+        for (let hour = start; hour <= end; hour += step) {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: '💧 Hydration Time!',
+              body: 'Time to drink a glass of water to maintain focus and vitality.',
+              sound: true,
+            },
+            trigger: {
+              type: Notifications.SchedulableTriggerInputTypes.DAILY,
+              hour,
+              minute: 15,
+              channelId: 'lifestyle-reminders',
+            },
+          });
+        }
+      }
+
+      // 3. Schedule Hourly Step & Movement Reminders (9:50 AM to 5:50 PM)
+      // Minute offset: :50 past the hour
+      if (prefs.stepRemindersEnabled) {
+        const startHour = prefs.stepStartHour ?? 9; // 9 AM
+        const endHour = prefs.stepEndHour ?? 18;   // 6 PM
+        for (let hour = startHour; hour < endHour; hour++) {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: '🚶 Movement Break',
+              body: 'Aim for 250 steps this hour! A quick walk boosts metabolism and focus.',
+              sound: true,
+            },
+            trigger: {
+              type: Notifications.SchedulableTriggerInputTypes.DAILY,
+              hour,
+              minute: 50,
+              channelId: 'lifestyle-reminders',
+            },
+          });
+        }
+      }
+
+      // 4. Schedule Daily 4:00 PM Caffeine Cutoff Reminder
+      // Minute offset: :00 at 4:00 PM
+      if (prefs.caffeineCutoffEnabled) {
         await Notifications.scheduleNotificationAsync({
           content: {
-            title: '💧 Hydration Time!',
-            body: 'Time to drink a glass of water to maintain focus and vitality.',
+            title: '☕ Caffeine Cutoff Time',
+            body: `It's ${formatTime(
+              prefs.caffeineCutoffHour,
+              prefs.caffeineCutoffMinute
+            )}! Time to stop caffeine intake to protect nighttime sleep & deep recovery.`,
             sound: true,
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DAILY,
-            hour,
-            minute: 0,
+            hour: prefs.caffeineCutoffHour,
+            minute: prefs.caffeineCutoffMinute,
             channelId: 'lifestyle-reminders',
           },
         });
       }
-    }
 
-    // 3. Schedule Hourly Step & Movement Reminders (9:00 AM to 6:00 PM)
-    if (prefs.stepRemindersEnabled) {
-      const startHour = prefs.stepStartHour ?? 9; // 9 AM
-      const endHour = prefs.stepEndHour ?? 18;   // 6 PM
-      for (let hour = startHour; hour < endHour; hour++) {
+      // 5. Schedule Daily 10:30 PM Bedtime & Wind-Down Reminder
+      if (prefs.sleepReminderEnabled) {
         await Notifications.scheduleNotificationAsync({
           content: {
-            title: '🚶 Movement Break',
-            body: 'Aim for 250 steps this hour! A quick walk boosts metabolism and focus.',
+            title: '🌙 Bedtime & Sleep Wind-Down',
+            body: `It's ${formatTime(
+              prefs.sleepReminderHour,
+              prefs.sleepReminderMinute
+            )}! Time to disconnect screens, relax, and get ready for deep restorative sleep.`,
             sound: true,
           },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DAILY,
-            hour,
-            minute: 50, // Remind at :50 of each hour (9:50 AM ... 5:50 PM)
+            hour: prefs.sleepReminderHour,
+            minute: prefs.sleepReminderMinute,
             channelId: 'lifestyle-reminders',
           },
         });
       }
-    }
 
-    // 4. Schedule Daily 4:00 PM Caffeine Cutoff Reminder
-    if (prefs.caffeineCutoffEnabled) {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '☕ Caffeine Cutoff Time',
-          body: `It's ${formatTime(
-            prefs.caffeineCutoffHour,
-            prefs.caffeineCutoffMinute
-          )}! Time to stop caffeine intake to protect nighttime sleep & deep recovery.`,
-          sound: true,
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DAILY,
-          hour: prefs.caffeineCutoffHour,
-          minute: prefs.caffeineCutoffMinute,
-          channelId: 'lifestyle-reminders',
-        },
-      });
-    }
+      // 6. Schedule Intermittent Fasting Reminders
+      if (prefs.fastingRemindersEnabled) {
+        const startHour = prefs.fastingStartHour ?? 11; // 11 AM
+        const endHour = prefs.fastingEndHour ?? 19;     // 7 PM
 
-    // 5. Schedule Daily 10:30 PM Bedtime & Wind-Down Reminder
-    if (prefs.sleepReminderEnabled) {
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '🌙 Bedtime & Sleep Wind-Down',
-          body: `It's ${formatTime(
-            prefs.sleepReminderHour,
-            prefs.sleepReminderMinute
-          )}! Time to disconnect screens, relax, and get ready for deep restorative sleep.`,
-          sound: true,
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DAILY,
-          hour: prefs.sleepReminderHour,
-          minute: prefs.sleepReminderMinute,
-          channelId: 'lifestyle-reminders',
-        },
-      });
-    }
+        // Key Milestone & Hourly Reminders during Eating Window (11 AM to 7 PM)
+        for (let hour = startHour; hour <= endHour; hour++) {
+          let title = '🍽️ Fasting Window: Eating Time';
+          let body = 'Time to eat a balanced, wholesome meal or healthy snack!';
+          let minute = 30; // Mid-hour check-in at :30 (doesn't collide with Water :15 or Steps :50)
 
-    // 6. Schedule Intermittent Fasting Reminders (11:00 AM to 7:00 PM Eating Window, 7:00 PM to 11:00 AM Fasting Window)
-    if (prefs.fastingRemindersEnabled) {
-      const startHour = prefs.fastingStartHour ?? 11; // 11 AM
-      const endHour = prefs.fastingEndHour ?? 19;     // 7 PM
+          if (hour === 11) {
+            title = '🟢 Eating Window Open (11:00 AM)';
+            body = 'Your eating window is now open! Break your fast with a nutritious meal.';
+            minute = 0; // Top of hour for window start
+          } else if (hour === 19) {
+            title = '🔴 Fasting Window Starting (7:00 PM)';
+            body = 'Last call for food! Your 16-hour fasting window starts at 7:00 PM.';
+            minute = 0; // Top of hour for window start
+          }
 
-      // Hourly Reminders during Eating Window (11 AM to 7 PM)
-      for (let hour = startHour; hour <= endHour; hour++) {
-        let title = '🍽️ Fasting Window: Eating Time';
-        let body = 'Time to eat a balanced, wholesome meal or healthy snack!';
-        if (hour === 11) {
-          title = '🟢 Eating Window Open (11:00 AM)';
-          body = 'Your eating window is now open! Break your fast with a nutritious meal.';
-        } else if (hour === 19) {
-          title = '🔴 Fasting Window Starting (7:00 PM)';
-          body = 'Last call for food! Your 16-hour fasting window starts at 7:00 PM.';
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title,
+              body,
+              sound: true,
+            },
+            trigger: {
+              type: Notifications.SchedulableTriggerInputTypes.DAILY,
+              hour,
+              minute,
+              channelId: 'lifestyle-reminders',
+            },
+          });
         }
 
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title,
-            body,
-            sound: true,
-          },
-          trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.DAILY,
-            hour,
-            minute: 0,
-            channelId: 'lifestyle-reminders',
-          },
-        });
+        // Fasting Window Check-in Reminders (7 PM to 11 AM) at :30 past the hour
+        const fastingCheckHours = [20, 22, 8, 10]; // 8 PM, 10 PM, 8 AM, 10 AM
+        for (const hour of fastingCheckHours) {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: '🔒 Fasting Window Active (7 PM - 11 AM)',
+              body: 'Fasting period in progress. Avoid meals & calories. Stay hydrated with plain water or black tea/coffee.',
+              sound: true,
+            },
+            trigger: {
+              type: Notifications.SchedulableTriggerInputTypes.DAILY,
+              hour,
+              minute: 30,
+              channelId: 'lifestyle-reminders',
+            },
+          });
+        }
       }
-
-      // Fasting Window Reminders (7 PM to 11 AM: Reminders to avoid meals)
-      const fastingCheckHours = [20, 22, 8, 10]; // 8 PM, 10 PM, 8 AM, 10 AM
-      for (const hour of fastingCheckHours) {
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: '🔒 Fasting Window Active (7 PM - 11 AM)',
-            body: 'Fasting period in progress. Avoid meals & calories. Stay hydrated with plain water or black tea/coffee.',
-            sound: true,
-          },
-          trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.DAILY,
-            hour,
-            minute: 0,
-            channelId: 'lifestyle-reminders',
-          },
-        });
-      }
+    } catch {
+      // Sync notifications error handled silently
+    } finally {
+      activeSyncPromise = null;
     }
+  })();
 
-    console.log('[Notifications] All lifestyle reminders synchronized successfully.');
-  } catch (error) {
-    console.error('Error synchronizing notifications:', error);
-  }
+  return activeSyncPromise;
 }
 
 /**

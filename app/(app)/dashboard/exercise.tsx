@@ -704,7 +704,7 @@ function ExerciseFormModal({
   );
 }
 
-export default function ExerciseScreen() {
+export function ExerciseContent({ embedded = false }: { embedded?: boolean }) {
 
   const [exercisePlan, setExercisePlan] = useState<any>(null);
   const [healthProfile, setHealthProfile] = useState<HealthProfile | null>(null);
@@ -778,14 +778,23 @@ export default function ExerciseScreen() {
     }
   };
 
-  if (loading) return <SafeAreaView style={s.center} edges={["top", "left", "right"]}><ActivityIndicator color={Colors.primaryLight} size="large" /></SafeAreaView>;
+  const Container = embedded ? View : SafeAreaView;
+  const containerEdges = embedded ? undefined : (["top", "left", "right"] as const);
+
+  if (loading) {
+    return (
+      <Container style={s.center} edges={containerEdges as any}>
+        <ActivityIndicator color={Colors.primaryLight} size="large" />
+      </Container>
+    );
+  }
 
   const dayPlan = getDayPlan(exercisePlan, selectedDay);
   const exercises = parseExercises(dayPlan);
   const dayType = typeof dayPlan === 'object' && dayPlan?.type ? dayPlan.type : null;
 
   return (
-    <SafeAreaView style={s.flex} edges={["top", "left", "right"]}>
+    <Container style={s.flex} edges={containerEdges as any}>
       <HealthProfileModal
         visible={showProfileModal}
         onClose={() => setShowProfileModal(false)}
@@ -910,8 +919,12 @@ export default function ExerciseScreen() {
         )}
         <View style={{ height: 24 }} />
       </ScrollView>
-    </SafeAreaView>
+    </Container>
   );
+}
+
+export default function ExerciseScreen() {
+  return <ExerciseContent embedded={false} />;
 }
 
 

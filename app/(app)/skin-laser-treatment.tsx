@@ -1,9 +1,12 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import TopNavbar from "@/components/dashboard/TopNavbar";
 import { CategoryCards } from "@/components/CategoryCards";
+import { VerticalGoalBottomNav } from "@/components/dashboard/VerticalGoalBottomNav";
+import { getPrimaryGoalInfo, fetchUserPrimaryGoal } from "@/lib/primaryGoal";
+import { supabase } from "@/lib/supabase";
 
 const SKIN_LASER_TREATMENT_PLANS = [
   "AI skin analysis",
@@ -16,19 +19,51 @@ const SKIN_LASER_TREATMENT_PLANS = [
 ];
 
 export default function SkinLaserTreatmentScreen() {
+  const [isUserPrimaryGoal, setIsUserPrimaryGoal] = useState(false);
+  const goalInfo = getPrimaryGoalInfo("Skin Laser Treatment");
+
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const goal = await fetchUserPrimaryGoal(session.user.id);
+        const isGoal =
+          !!goal &&
+          (goal.toLowerCase().includes("skin") ||
+            goal.toLowerCase().includes("laser"));
+        setIsUserPrimaryGoal(isGoal);
+      }
+    });
+  }, []);
+
   return (
     <View style={styles.rootContainer}>
       <TopNavbar userName="User" />
       <View style={styles.subHeaderNavRow}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.push("/(app)")}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="arrow-back" size={20} color="#0F172A" />
-          <Text style={styles.backButtonText}>Back</Text>
-        </TouchableOpacity>
+        {!isUserPrimaryGoal ? (
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.push("/(app)")}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={20} color="#0F172A" />
+            <Text style={styles.backButtonText}>Back</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 8 }} />
+        )}
         <Text style={styles.headerCategoryTitle}>Skin Laser Treatment</Text>
+        {isUserPrimaryGoal ? (
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.push("/(app)/dashboard/profile")}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="person-outline" size={16} color="#0284C7" />
+            <Text style={[styles.backButtonText, { color: "#0284C7" }]}>Profile</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 8 }} />
+        )}
       </View>
       <CategoryCards
         categoryTitle="Skin Laser Treatment"
@@ -40,6 +75,9 @@ export default function SkinLaserTreatmentScreen() {
         productsIcon="cart"
         treatmentPlans={SKIN_LASER_TREATMENT_PLANS}
       />
+      {isUserPrimaryGoal && (
+        <VerticalGoalBottomNav goal={goalInfo} activeTab="goal" />
+      )}
     </View>
   );
 }

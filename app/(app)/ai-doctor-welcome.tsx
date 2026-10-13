@@ -11,19 +11,33 @@ import {
   Easing,
 } from 'react-native';
 import { MaterialCommunityIcons, Feather } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useFocusEffect } from 'expo-router';
-import { Audio, Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
+import { router, useFocusEffect } from 'expo-router';
+import { VideoView, useVideoPlayer } from 'expo-video';
 
 const { width } = Dimensions.get('window');
 
-export default function AIDoctorWelcomeScreen() {
-  const [sound, setSound] = useState<Audio.Sound>();
-  const [videoEnded, setVideoEnded] = useState(false);
-  const videoRef = useRef<Video>(null);
+function getExpoAudio() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require('expo-audio');
+  } catch {
+    return null;
+  }
+}
 
-  // All animated values — exclusively useNativeDriver: false to avoid
-  // the mixed-driver crash caused by Animated.multiply on shared nodes.
+export default function AIDoctorWelcomeScreen() {
+  const [videoEnded, setVideoEnded] = useState(false);
+  const audioPlayerRef = useRef<any>(null);
+
+  const videoPlayer = useVideoPlayer(
+    require('../../assets/images/ai_doctor/welcome_doctor.mp4'),
+    (player) => {
+      player.loop = false;
+      player.play();
+    }
+  );
+
+  // All animated values
   const headerAnim = useRef(new Animated.Value(0)).current;
   const textAnim = useRef(new Animated.Value(0)).current;
   const videoAnim = useRef(new Animated.Value(0)).current;
@@ -32,79 +46,9 @@ export default function AIDoctorWelcomeScreen() {
   const ctaPulse = useRef(new Animated.Value(1)).current;
   const ctaGlow = useRef(new Animated.Value(0)).current;
 
-  async function playSound() {
-    try {
-      const { sound } = await Audio.Sound.createAsync(
-        require('../../assets/images/ai_doctor/welcome_doctor_audio.m4a'),
-        { shouldPlay: true, isLooping: false }
-      );
-      setSound(sound);
-    } catch (error) {
-      console.log('Error playing sound:', error);
-    }
-  }
-
-  // ── Re-play video + sound every time this tab comes into focus ──────────────
-  useFocusEffect(
-    useCallback(() => {
-      // Reset state
-      setVideoEnded(false);
-      ctaScale.setValue(1);
-      ctaPulse.setValue(1);
-      ctaGlow.setValue(0);
-
-      // Reset entrance animations so they replay
-      headerAnim.setValue(0);
-      textAnim.setValue(0);
-      videoAnim.setValue(0);
-      sheetAnim.setValue(0);
-
-      // Replay the video from the beginning
-      videoRef.current?.replayAsync().catch(() => {
-        // If replayAsync fails (first load), the shouldPlay prop handles it
-        videoRef.current?.playAsync().catch(() => {});
-      });
-
-      // Stagger entrance animations
-      Animated.stagger(120, [
-        Animated.timing(headerAnim, {
-          toValue: 1, duration: 400,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: false,
-        }),
-        Animated.timing(textAnim, {
-          toValue: 1, duration: 450,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: false,
-        }),
-        Animated.timing(videoAnim, {
-          toValue: 1, duration: 550,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: false,
-        }),
-        Animated.timing(sheetAnim, {
-          toValue: 1, duration: 500,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: false,
-        }),
-      ]).start();
-
-      // Play welcome audio
-      playSound();
-
-      // Cleanup when screen loses focus
-      return () => {
-        sound?.stopAsync().catch(() => {});
-        sound?.unloadAsync().catch(() => {});
-        setSound(undefined);
-        videoRef.current?.pauseAsync().catch(() => {});
-      };
-    }, [])
-  );
-
-
-  const handlePlaybackStatusUpdate = (status: AVPlaybackStatus) => {
-    if (status.isLoaded && status.didJustFinish && !videoEnded) {
+  // Track video end state via expo-video listener
+  useEffect(() => {
+    const sub = videoPlayer.addListener('playToEnd', () => {
       setVideoEnded(true);
 
       // Pop the CTA button to draw attention
@@ -128,8 +72,80 @@ export default function AIDoctorWelcomeScreen() {
           Animated.timing(ctaGlow, { toValue: 0, duration: 900, easing: Easing.inOut(Easing.sin), useNativeDriver: false }),
         ])
       ).start();
+    });
+
+    return () => {
+      sub.remove();
+    };
+  }, [videoPlayer]);
+
+  const playWelcomeAudio = useCallback(() => {
+    try {
+      const expoAudio = getExpoAudio();
+      if (!expoAudio) return;
+
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.seekTo(0);
+        audioPlayerRef.current.play();
+      } else {
+        const player = expoAudio.createAudioPlayer(
+          require('../../assets/images/ai_doctor/welcome_doctor_audio.m4a')
+        );
+        audioPlayerRef.current = player;
+        player.play();
+      }
+    } catch {
+      // Audio play error handled silently
     }
-  };
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      setVideoEnded(false);
+      ctaScale.setValue(1);
+      ctaPulse.setValue(1);
+      ctaGlow.setValue(0);
+
+      headerAnim.setValue(0);
+      textAnim.setValue(0);
+      videoAnim.setValue(0);
+      sheetAnim.setValue(0);
+
+      try {
+        videoPlayer.replay();
+      } catch {}
+
+      Animated.stagger(120, [
+        Animated.timing(headerAnim, {
+          toValue: 1, duration: 400,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: false,
+        }),
+        Animated.timing(textAnim, {
+          toValue: 1, duration: 450,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: false,
+        }),
+        Animated.timing(videoAnim, {
+          toValue: 1, duration: 550,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: false,
+        }),
+        Animated.timing(sheetAnim, {
+          toValue: 1, duration: 500,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: false,
+        }),
+      ]).start();
+
+      playWelcomeAudio();
+
+      return () => {
+        try { audioPlayerRef.current?.pause(); } catch {}
+        try { videoPlayer.pause(); } catch {}
+      };
+    }, [videoPlayer, playWelcomeAudio])
+  );
 
   const headerStyle = { opacity: headerAnim, transform: [{ translateY: headerAnim.interpolate({ inputRange: [0, 1], outputRange: [-20, 0] }) }] };
   const textStyle = { opacity: textAnim, transform: [{ translateY: textAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] };
@@ -167,13 +183,12 @@ export default function AIDoctorWelcomeScreen() {
 
         {/* Doctor video — fills remaining space */}
         <Animated.View style={[styles.videoWrapper, videoStyle]}>
-          <Video
-            source={require('../../assets/images/ai_doctor/welcome_doctor.mp4')}
+          <VideoView
             style={styles.doctorVideo}
-            resizeMode={ResizeMode.COVER}
-            shouldPlay
-            isMuted
-            onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
+            player={videoPlayer}
+            contentFit="cover"
+            nativeControls={false}
+            allowsFullscreen={false}
           />
         </Animated.View>
       </View>
@@ -201,7 +216,6 @@ export default function AIDoctorWelcomeScreen() {
         {/* CTA Button */}
         <Animated.View
           style={{
-            transform: [{ scale: Animated.multiply(ctaScale, ctaPulse) }],
             shadowColor: '#107C84',
             shadowOffset: { width: 0, height: 4 },
             shadowOpacity: glowOpacity as unknown as number,
@@ -214,7 +228,9 @@ export default function AIDoctorWelcomeScreen() {
             activeOpacity={0.85}
             onPress={() => router.push('/(app)/ai-doctor-chat')}
           >
-            <Text style={styles.primaryButtonText}>Start Health Assessment</Text>
+            <Text style={styles.primaryButtonText}>
+              {videoEnded ? 'Start Health Assessment' : 'Skip & Start Assessment'}
+            </Text>
             <Feather name="arrow-right" size={18} color="#FFFFFF" />
           </TouchableOpacity>
         </Animated.View>

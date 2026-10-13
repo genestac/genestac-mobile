@@ -4,7 +4,7 @@ import {
   KeyboardAvoidingView, Platform, Animated, StatusBar, Image,
   ActivityIndicator, Dimensions, Alert, Modal,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -121,6 +121,7 @@ function VoicePulse({ active, color = C.tealLight }: { active: boolean; color?: 
 
 // ── Main Screen ────────────────────────────────────────────────────────────────
 export default function AIDoctorChatScreen() {
+  const insets = useSafeAreaInsets();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -339,7 +340,7 @@ export default function AIDoctorChatScreen() {
         return;
       }
       const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaType.Images,
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         quality: 0.6,
         base64: true,
         allowsEditing: false,
@@ -353,7 +354,7 @@ export default function AIDoctorChatScreen() {
       // Convert to base64 if not already provided
       let base64 = asset.base64;
       if (!base64) {
-        base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+        base64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: 'base64' as any });
       }
 
       const analysis = await analyzeFoodImage(base64!);
@@ -533,7 +534,7 @@ export default function AIDoctorChatScreen() {
 
       {/* Header */}
       <View style={s.header}>
-        <TouchableOpacity style={s.headerBack} onPress={() => router.back()}>
+        <TouchableOpacity style={s.headerBack} onPress={() => { if (router.canGoBack()) { router.back(); } else { router.replace('/(app)/dashboard'); } }}>
           <Feather name="arrow-left" size={20} color={C.textPrimary} />
         </TouchableOpacity>
         <View style={s.headerCenter}>
@@ -554,7 +555,7 @@ export default function AIDoctorChatScreen() {
       {/* Messages */}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior="padding"
         keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         {!sessionLoaded ? (
@@ -616,7 +617,12 @@ export default function AIDoctorChatScreen() {
         )}
 
         {/* Input bar */}
-        <View style={s.inputBar}>
+        <View style={[
+          s.inputBar,
+          {
+            paddingBottom: Math.max(insets.bottom, 12),
+          },
+        ]}>
           <View style={s.inputRow}>
             {/* Camera diet log button */}
             <TouchableOpacity
@@ -860,7 +866,7 @@ const s = StyleSheet.create({
   // Input bar
   inputBar: {
     backgroundColor: C.white, borderTopWidth: 1, borderTopColor: C.border,
-    paddingHorizontal: 12, paddingTop: 10, paddingBottom: Platform.OS === 'ios' ? 20 : 12,
+    paddingHorizontal: 12, paddingTop: 10,
     gap: 10,
   },
   inputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },

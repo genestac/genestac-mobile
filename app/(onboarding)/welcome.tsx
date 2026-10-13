@@ -150,7 +150,7 @@ export default function WelcomeScreen() {
             </SvgText>
           </Svg>
 
-          <Text style={styles.subtitle}>Doctor Guided Weight Loss Program</Text>
+          <Text style={styles.subtitle}>AI + Precision Medicine Platform</Text>
 
           {/* Doctor images */}
           <View style={styles.doctorsRow}>

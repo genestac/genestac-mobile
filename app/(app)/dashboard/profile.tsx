@@ -5,57 +5,36 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   Alert,
   ActivityIndicator,
-  Modal,
-  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import Svg, { Path } from "react-native-svg";
 import { supabase } from "@/lib/supabase";
-import { safeWebBrowser, makeRedirectUri } from "@/lib/webBrowser";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Colors, Fonts, Spacing, Radius } from "@/constants/colors";
-import { NotificationSettingsCard } from "@/components/NotificationSettingsCard";
+import { Colors } from "@/constants/colors";
 import { PricingModal } from "@/components/PricingModal";
-import { TermsModal } from "@/components/TermsModal";
-import { PrivacyPolicyModal } from "@/components/PrivacyPolicyModal";
-
-const SETTINGS = [
-  { key: "name", icon: "person-outline", label: "Full Name" },
-  { key: "phone", icon: "call-outline", label: "Phone Number" },
-] as const;
+import { PrimaryGoalModal } from "@/components/PrimaryGoalModal";
+import { NotificationSettingsCard } from "@/components/NotificationSettingsCard";
+import { getRouteForPrimaryGoal } from "@/lib/primaryGoal";
 
 export default function ProfileScreen() {
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [editField, setEditField] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState("");
-  const [saving, setSaving] = useState(false);
 
-  // Subscription modal & state
+  // Vitals stats from health profile
+  const [weightKg, setWeightKg] = useState("78 kg");
+  const [heightCm, setHeightCm] = useState("178 cm");
+  const [ageYrs, setAgeYrs] = useState("24 yrs");
+
+  // Primary Goal State
+  const [primaryGoal, setPrimaryGoal] = useState<string | null>(null);
+  const [showGoalModal, setShowGoalModal] = useState(false);
+
+  // Pro Subscription modal
   const [showPricingModal, setShowPricingModal] = useState(false);
-  const [showTermsModal, setShowTermsModal] = useState(false);
-  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [isProUser, setIsProUser] = useState(false);
-
-  // Change password
-  const [showPwModal, setShowPwModal] = useState(false);
-  const [newPw, setNewPw] = useState("");
-  const [savingPw, setSavingPw] = useState(false);
-
-  const [googleLoading, setGoogleLoading] = useState(false);
-
-  useEffect(() => {
-    safeWebBrowser.warmUpAsync();
-    return () => {
-      safeWebBrowser.coolDownAsync();
-    };
-  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -67,861 +46,582 @@ export default function ProfileScreen() {
         return;
       }
       setUser(session.user);
+
       const { data } = await supabase
         .from("users")
-        .select("name, email, phone, metadata, interested_plan_id")
+        .select("name, email, phone, metadata, interested_plan_id, primary_goal, weight_loss_journey")
         .eq("id", session.user.id)
         .maybeSingle();
 
-      // Verify Pro status against Supabase database (source of truth)
-      let isPro = false;
+      setProfile(data);
+      setPrimaryGoal(data?.primary_goal || "Weight Loss");
+
+      // Set vitals if present
+      const journey = data?.weight_loss_journey;
+      if (journey?.history && journey.history.length > 0) {
+        setWeightKg(`${journey.history[0].weight} kg`);
+      }
+
+      // Check Pro status
       const meta = data?.metadata;
       if (meta && typeof meta === "object" && meta.is_pro === true) {
-        if (meta.pro_expires_at) {
-          const expires = new Date(meta.pro_expires_at).getTime();
-          if (expires > Date.now()) {
-            isPro = true;
-          }
-        } else {
-          isPro = true;
-        }
-      }
-
-      if (isPro) {
-        await AsyncStorage.setItem("@genestac_is_pro", "true");
         setIsProUser(true);
-      } else {
-        await AsyncStorage.removeItem("@genestac_is_pro");
-        setIsProUser(false);
       }
 
-      setProfile(data);
       setLoading(false);
     };
+
     load();
   }, []);
 
-  const openEdit = (field: string, value: string) => {
-    setEditField(field);
-    setEditValue(value ?? "");
-  };
-
-  const handleSaveField = async () => {
-    if (!editField || !user) return;
-    setSaving(true);
-    const { error } = await supabase
-      .from("users")
-      .update({ [editField]: editValue.trim() })
-      .eq("id", user.id);
-    setSaving(false);
-    if (error) {
-      Alert.alert("Error", error.message);
-      return;
-    }
-    setProfile((p: any) => ({ ...p, [editField]: editValue.trim() }));
-    setEditField(null);
-    Alert.alert("Saved!", "Profile updated.");
-  };
-
-  const handleChangePassword = async () => {
-    if (!newPw || newPw.length < 8) {
-      Alert.alert("Weak Password", "Password must be at least 8 characters.");
-      return;
-    }
-    setSavingPw(true);
-    const { error } = await supabase.auth.updateUser({ password: newPw });
-    setSavingPw(false);
-    if (error) {
-      Alert.alert("Error", error.message);
-      return;
-    }
-    setShowPwModal(false);
-    setNewPw("");
-    Alert.alert("Success", "Password changed successfully!");
-  };
-
-  const handleSignOut = async () => {
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+  const handleSignOut = () => {
+    Alert.alert("Log Out", "Are you sure you want to log out of Genestac?", [
       { text: "Cancel", style: "cancel" },
       {
-        text: "Sign Out",
+        text: "Log Out",
         style: "destructive",
         onPress: async () => {
           await supabase.auth.signOut();
-          setTimeout(() => {
-            router.replace("/(auth)/login");
-          }, 0);
+          router.replace("/(auth)/login");
         },
       },
     ]);
   };
 
-  const handleLinkGoogle = async () => {
-    try {
-      setGoogleLoading(true);
-      const redirectUrl = makeRedirectUri({
-        scheme: "genestac",
-        path: "auth/callback",
-      });
-
-      const { data, error } = await supabase.auth.linkIdentity({
-        provider: "google",
-        options: {
-          redirectTo: redirectUrl,
-          skipBrowserRedirect: true,
-        },
-      });
-
-      if (error || !data?.url) {
-        Alert.alert(
-          "Link Failed",
-          error?.message ?? "Could not start Google link.",
-        );
-        return;
-      }
-
-      const result = await safeWebBrowser.openAuthSessionAsync(
-        data.url,
-        redirectUrl,
-      );
-
-      if (result.type === "success" && result.url) {
-        const url = new URL(result.url);
-        const params = new URLSearchParams(
-          url.hash ? url.hash.substring(1) : url.search.substring(1),
-        );
-        const accessToken = params.get("access_token");
-        const refreshToken = params.get("refresh_token");
-
-        if (accessToken && refreshToken) {
-          const { data: sessionData, error: sessionError } =
-            await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken,
-            });
-          if (!sessionError && sessionData.session?.user) {
-            setUser(sessionData.session.user);
-            Alert.alert("Success", "Google account connected successfully!");
-            return;
-          }
-        }
-
-        // Fallback to refresh session
-        const { data: refreshData } = await supabase.auth.refreshSession();
-        if (refreshData?.session?.user) {
-          setUser(refreshData.session.user);
-          Alert.alert("Success", "Google account connected successfully!");
-        } else {
-          Alert.alert(
-            "Link Complete",
-            "Account linked but couldn't refresh session.",
-          );
-        }
-      }
-    } catch (err: any) {
-      Alert.alert("Error", err.message ?? "Something went wrong.");
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
-
-  if (loading)
+  if (loading) {
     return (
-      <SafeAreaView style={s.center} edges={["top", "left", "right"]}>
-        <ActivityIndicator color={Colors.primaryLight} size="large" />
+      <SafeAreaView style={styles.centerContainer} edges={["top"]}>
+        <ActivityIndicator color="#0A8554" size="large" />
       </SafeAreaView>
     );
+  }
 
-  const name = profile?.name ?? user?.user_metadata?.full_name ?? "User";
-  const email = profile?.email ?? user?.email ?? "";
+  const name =
+    profile?.name?.trim() ||
+    user?.user_metadata?.full_name?.trim() ||
+    user?.user_metadata?.name?.trim() ||
+    "Jaskamal Singh";
+  const email = profile?.email || user?.email || "jaskamal@example.com";
   const initials = name.slice(0, 2).toUpperCase();
-  const userId = user?.id?.slice(0, 8) ?? "";
-  const isGoogleConnected =
-    user?.app_metadata?.providers?.includes("google") ?? false;
 
   return (
-    <SafeAreaView style={s.flex} edges={["top", "left", "right"]}>
+    <SafeAreaView style={styles.safeArea} edges={["top"]}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={{ width: 36 }} />
+        <Text style={styles.headerTitle}>Profile</Text>
+        <TouchableOpacity
+          style={styles.settingsIconBtn}
+          onPress={() => setShowGoalModal(true)}
+          hitSlop={12}
+        >
+          <Ionicons name="settings-outline" size={22} color="#0F172A" />
+        </TouchableOpacity>
+      </View>
+
       <ScrollView
-        style={s.flex}
-        contentContainerStyle={s.scroll}
+        contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Avatar */}
-        <View style={s.avatarSection}>
-          <View style={s.avatarCircle}>
-            <Text style={s.avatarText}>{initials}</Text>
+        {/* User Card: Avatar, Name, Email */}
+        <View style={styles.userProfileHero}>
+          <View style={styles.avatarContainer}>
+            <View style={styles.avatarCircle}>
+              <Text style={styles.avatarInitialsText}>{initials}</Text>
+            </View>
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <Text style={s.displayName}>{name}</Text>
-            {isProUser && (
-              <View style={s.proBadgeHeader}>
-                <Ionicons name="sparkles" size={12} color="#f59e0b" />
-                <Text style={s.proBadgeHeaderText}>PRO</Text>
-              </View>
-            )}
+          <Text style={styles.userNameText}>{name}</Text>
+          <Text style={styles.userEmailText}>{email}</Text>
+        </View>
+
+        {/* 3 Vitals Stats Cards Row (Weight, Height, Age) */}
+        <View style={styles.vitalsRow}>
+          <View style={styles.vitalCard}>
+            <Text style={styles.vitalValueText}>{weightKg}</Text>
+            <Text style={styles.vitalLabelText}>Weight</Text>
           </View>
-          <Text style={s.displayEmail}>{email}</Text>
-          <View style={s.idBadge}>
-            <Text style={s.idText}>ID: {userId}</Text>
+
+          <View style={styles.vitalCard}>
+            <Text style={styles.vitalValueText}>{heightCm}</Text>
+            <Text style={styles.vitalLabelText}>Height</Text>
+          </View>
+
+          <View style={styles.vitalCard}>
+            <Text style={styles.vitalValueText}>{ageYrs}</Text>
+            <Text style={styles.vitalLabelText}>Age</Text>
           </View>
         </View>
 
-        {/* Profile Fields */}
-        <View style={s.sectionCard}>
-          <Text style={s.sectionTitle}>Profile Information</Text>
-          {SETTINGS.map(({ key, icon, label }) => (
-            <TouchableOpacity
-              key={key}
-              style={s.fieldRow}
-              onPress={() => openEdit(key, profile?.[key] ?? "")}
-            >
-              <Ionicons
-                name={icon as any}
-                size={18}
-                color={Colors.primaryLight}
-              />
-              <View style={s.fieldInfo}>
-                <Text style={s.fieldLabel}>{label}</Text>
-                <Text style={s.fieldValue}>{profile?.[key] ?? "Not set"}</Text>
-              </View>
-              <Ionicons
-                name="chevron-forward"
-                size={16}
-                color={Colors.textLight}
-              />
-            </TouchableOpacity>
-          ))}
-          <View style={s.fieldRow}>
-            <Ionicons
-              name="mail-outline"
-              size={18}
-              color={Colors.primaryLight}
-            />
-            <View style={s.fieldInfo}>
-              <Text style={s.fieldLabel}>Email Address</Text>
-              <Text style={s.fieldValue}>{email}</Text>
-            </View>
-            <Ionicons
-              name="lock-closed-outline"
-              size={14}
-              color={Colors.textLight}
-            />
-          </View>
-        </View>
+        {/* ── Genestac Pro Pricing Banner ── */}
+        <TouchableOpacity
+          style={styles.proBanner}
+          onPress={() => setShowPricingModal(true)}
+          activeOpacity={0.88}
+        >
+          {/* Decorative glow circles */}
+          <View style={styles.proGlowTopRight} />
+          <View style={styles.proGlowBottomLeft} />
 
-        {/* Membership & Subscriptions Section */}
-        <View style={s.sectionCard}>
-          <Text style={s.sectionTitle}>Membership & Subscription</Text>
-          <TouchableOpacity
-            style={s.fieldRow}
-            onPress={() => setShowPricingModal(true)}
-            activeOpacity={0.8}
-          >
-            <View style={s.proIconContainer}>
-              <Ionicons name="sparkles" size={18} color="#f59e0b" />
+          <View style={styles.proBannerLeft}>
+            <View style={styles.proIconCircle}>
+              <Ionicons name="sparkles" size={22} color="#f59e0b" />
             </View>
-            <View style={s.fieldInfo}>
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-              >
-                <Text style={s.fieldLabel}>Genestac Pro Membership</Text>
-                {isProUser ? (
-                  <View style={s.proBadgeActive}>
-                    <Text style={s.proBadgeActiveText}>ACTIVE</Text>
+            <View style={{ flex: 1 }}>
+              {isProUser ? (
+                <>
+                  <View style={styles.proActiveBadge}>
+                    <Ionicons name="checkmark-circle" size={13} color="#4ade80" />
+                    <Text style={styles.proActiveBadgeText}>PRO ACTIVE</Text>
                   </View>
-                ) : (
-                  <View style={s.proBadgeUpgrade}>
-                    <Text style={s.proBadgeUpgradeText}>SAVE 50%</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={s.fieldValue}>
-                {isProUser
-                  ? "You have full VIP access to analytics & features"
-                  : "Unlock analytics, badges & unlimited access"}
-              </Text>
-            </View>
-            <Ionicons
-              name="chevron-forward"
-              size={16}
-              color={Colors.textLight}
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Lifestyle & Habit Notifications */}
-        <NotificationSettingsCard />
-
-        {/* Rewards & Referrals */}
-        <View style={s.sectionCard}>
-          <Text style={s.sectionTitle}>Rewards & Referrals</Text>
-          <TouchableOpacity
-            style={s.fieldRow}
-            onPress={() => router.push("/(app)/dashboard/referral")}
-          >
-            <Ionicons
-              name="gift-outline"
-              size={18}
-              color={Colors.primaryLight}
-            />
-            <View style={s.fieldInfo}>
-              <Text style={s.fieldLabel}>Refer & Earn Rewards</Text>
-              <Text style={s.fieldValue}>
-                Share your code, view wallet balance & ledger
-              </Text>
-            </View>
-            <Ionicons
-              name="chevron-forward"
-              size={16}
-              color={Colors.textLight}
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Security */}
-        <View style={s.sectionCard}>
-          <Text style={s.sectionTitle}>Security</Text>
-          <TouchableOpacity
-            style={s.fieldRow}
-            onPress={() => setShowPwModal(true)}
-          >
-            <Ionicons
-              name="lock-closed-outline"
-              size={18}
-              color={Colors.primaryLight}
-            />
-            <View style={s.fieldInfo}>
-              <Text style={s.fieldLabel}>Change Password</Text>
-              <Text style={s.fieldValue}>••••••••</Text>
-            </View>
-            <Ionicons
-              name="chevron-forward"
-              size={16}
-              color={Colors.textLight}
-            />
-          </TouchableOpacity>
-        </View>
-
-        {/* Linked Accounts */}
-        <View style={s.sectionCard}>
-          <Text style={s.sectionTitle}>Linked Accounts</Text>
-          <View style={{ padding: Spacing.md }}>
-            <TouchableOpacity
-              style={[
-                s.googleBtn,
-                (googleLoading || isGoogleConnected) && s.googleBtnDisabled,
-              ]}
-              onPress={handleLinkGoogle}
-              disabled={googleLoading || isGoogleConnected}
-              activeOpacity={0.82}
-            >
-              {googleLoading ? (
-                <ActivityIndicator size="small" color={Colors.textSecondary} />
+                  <Text style={styles.proBannerTitle}>{"You're a Pro Member \uD83C\uDF89"}</Text>
+                  <Text style={styles.proBannerSubtitle}>All premium features unlocked</Text>
+                </>
               ) : (
                 <>
-                  <Svg width={20} height={20} viewBox="0 0 24 24">
-                    <Path
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      fill="#4285F4"
-                    />
-                    <Path
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      fill="#34A853"
-                    />
-                    <Path
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
-                      fill="#FBBC05"
-                    />
-                    <Path
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                      fill="#EA4335"
-                    />
-                  </Svg>
-                  <Text style={s.googleBtnText}>
-                    {isGoogleConnected
-                      ? "Connected with Google"
-                      : "Connect with Google"}
+                  <Text style={styles.proBannerTitle}>Upgrade to Genestac Pro</Text>
+                  <Text style={styles.proBannerSubtitle}>
+                    Unlock advanced plans, AI coaching & more
                   </Text>
                 </>
               )}
-            </TouchableOpacity>
+            </View>
           </View>
-        </View>
 
-        {/* AI Health coach CTA */}
-        <TouchableOpacity
-          style={s.aiDoctorBtn}
-          onPress={() => router.push('/(app)/ai-doctor-chat')}
-          activeOpacity={0.9}
-        >
-          <View style={s.aiDoctorIconBox}>
-            <Ionicons name="medical" size={22} color="#0E7C86" />
-          </View>
-          <View style={s.aiDoctorContent}>
-            <Text style={s.aiDoctorTitle}>AI Health coach</Text>
-            <Text style={s.aiDoctorSubtitle}>Clinical health assessment · Powered by AI</Text>
-          </View>
-          <Ionicons name="arrow-forward-circle" size={28} color="#0E7C86" />
+          {!isProUser && (
+            <View style={styles.proCtaChip}>
+              <Text style={styles.proCtaChipText}>View Plans</Text>
+              <Ionicons name="chevron-forward" size={13} color="#0A8554" />
+            </View>
+          )}
         </TouchableOpacity>
 
-        {/* Sign Out */}
-        <TouchableOpacity style={s.signOutBtn} onPress={handleSignOut}>
-          <Ionicons name="log-out-outline" size={20} color={Colors.danger} />
-          <Text style={s.signOutText}>Sign Out</Text>
-        </TouchableOpacity>
+        {/* Menu Items List */}
+        <View style={styles.menuCard}>
+          {/* My Plans */}
+          <TouchableOpacity
+            style={styles.menuRow}
+            onPress={() => router.push("/(app)/dashboard/plan")}
+            activeOpacity={0.7}
+          >
+            <View style={styles.menuIconBg}>
+              <Ionicons name="clipboard-outline" size={20} color="#0A8554" />
+            </View>
+            <Text style={styles.menuTitleText}>My Plans</Text>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </TouchableOpacity>
 
+          {/* Health Reports */}
+          <TouchableOpacity
+            style={styles.menuRow}
+            onPress={() => router.push("/(app)/dashboard/track")}
+            activeOpacity={0.7}
+          >
+            <View style={styles.menuIconBg}>
+              <Ionicons name="document-text-outline" size={20} color="#0A8554" />
+            </View>
+            <Text style={styles.menuTitleText}>Health Reports</Text>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </TouchableOpacity>
 
-        {/* Footer Bar */}
-        <View style={s.footerContainer}>
-          <View style={s.footerTopRow}>
-            <View style={{ flex: 1, gap: 6 }}>
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-              >
-                <Image
-                  source={require("@/assets/images/brand/logo.png")}
-                  style={{ width: 70, height: 60, resizeMode: "contain" }}
-                />
+          {/* Book Consultation */}
+          <TouchableOpacity
+            style={styles.menuRow}
+            onPress={() => router.push("/(app)/dashboard/consultation")}
+            activeOpacity={0.7}
+          >
+            <View style={styles.menuIconBg}>
+              <Ionicons name="medkit-outline" size={20} color="#0A8554" />
+            </View>
+            <Text style={styles.menuTitleText}>Book Consultation</Text>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </TouchableOpacity>
+
+          {/* Buy Products */}
+          <TouchableOpacity
+            style={styles.menuRow}
+            onPress={() => router.push("/(app)/dashboard/shop")}
+            activeOpacity={0.7}
+          >
+            <View style={styles.menuIconBg}>
+              <Ionicons name="bag-handle-outline" size={20} color="#0A8554" />
+            </View>
+            <Text style={styles.menuTitleText}>Buy Products</Text>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </TouchableOpacity>
+
+          {/* Subscription / Pro Plans */}
+          <TouchableOpacity
+            style={styles.menuRow}
+            onPress={() => setShowPricingModal(true)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.menuIconBg, { backgroundColor: "#FEF3C7" }]}>
+              <Ionicons name="diamond-outline" size={20} color="#d97706" />
+            </View>
+            <Text style={styles.menuTitleText}>Subscription & Plans</Text>
+            {isProUser ? (
+              <View style={styles.proMenuBadge}>
+                <Text style={styles.proMenuBadgeText}>PRO</Text>
               </View>
-              <Text style={s.footerDescText}>
-                The pinnacle of personalized metabolic care and cellular
-                optimization for high-performing individuals.
-              </Text>
-            </View>
+            ) : (
+              <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+            )}
+          </TouchableOpacity>
 
-            <View style={{ flex: 1, gap: 4 }}>
-              <Text style={s.footerContactText}>✉ info@genestac.com</Text>
-              <Text style={s.footerContactText}>📞 +91 9971114121</Text>
-              <Text style={s.footerContactText}>
-                📍 A Block, Unitech Business Zone, Sector 50, Gurugram, Haryana
-                122018
-              </Text>
+          {/* Settings / Primary Goal */}
+          <TouchableOpacity
+            style={styles.menuRow}
+            onPress={() => setShowGoalModal(true)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.menuIconBg}>
+              <Ionicons name="settings-outline" size={20} color="#0A8554" />
             </View>
-          </View>
-
-          <View style={s.footerBottomDivider} />
-
-          <View style={s.footerBottomRow}>
-            <Text style={s.footerCopyright}>
-              © 2025 GENESTAC. ALL RIGHTS RESERVED.
-            </Text>
-            <View style={{ flexDirection: "row", gap: 12, flexWrap: "wrap" }}>
-              <TouchableOpacity
-                onPress={() => setShowTermsModal(true)}
-                activeOpacity={0.7}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Text style={s.footerLegalLink}>Terms & Conditions</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setShowPrivacyModal(true)}
-                activeOpacity={0.7}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Text style={s.footerLegalLink}>Privacy Policy</Text>
-              </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.menuTitleText}>Settings & Primary Goal</Text>
             </View>
-          </View>
+            {primaryGoal && (
+              <View style={styles.goalBadge}>
+                <Text style={styles.goalBadgeText}>{primaryGoal}</Text>
+              </View>
+            )}
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </TouchableOpacity>
+
+          {/* Help & Support */}
+          <TouchableOpacity
+            style={styles.menuRow}
+            onPress={() => Alert.alert("Support", "Need help? Email care@genestac.com")}
+            activeOpacity={0.7}
+          >
+            <View style={styles.menuIconBg}>
+              <Ionicons name="help-circle-outline" size={20} color="#0A8554" />
+            </View>
+            <Text style={styles.menuTitleText}>Help & Support</Text>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </TouchableOpacity>
+
+          {/* Log Out */}
+          <TouchableOpacity
+            style={[styles.menuRow, { borderBottomWidth: 0 }]}
+            onPress={handleSignOut}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.menuIconBg, { backgroundColor: "#FEE2E2" }]}>
+              <Ionicons name="log-out-outline" size={20} color="#DC2626" />
+            </View>
+            <Text style={[styles.menuTitleText, { color: "#DC2626" }]}>Log Out</Text>
+            <Ionicons name="chevron-forward" size={18} color="#F87171" />
+          </TouchableOpacity>
         </View>
 
-        <View style={{ height: 24 }} />
+        {/* ── Notification Preferences & Controls ── */}
+        <NotificationSettingsCard />
+
+        {/* Footer Brand Card */}
+        <View style={styles.brandFooterCard}>
+          <View style={styles.brandFooterIconCircle}>
+            <Ionicons name="leaf" size={22} color="#0A8554" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.brandFooterTitle}>Better health. Brighter you.</Text>
+            <Text style={styles.brandFooterSub}>Genestac</Text>
+          </View>
+        </View>
       </ScrollView>
 
-      {/* Terms & Conditions Modal */}
-      <TermsModal
-        visible={showTermsModal}
-        onClose={() => setShowTermsModal(false)}
-      />
-
-      {/* Privacy Policy Modal */}
-      <PrivacyPolicyModal
-        visible={showPrivacyModal}
-        onClose={() => setShowPrivacyModal(false)}
-      />
-
-      {/* Edit Field Modal */}
-      <Modal visible={!!editField} transparent animationType="slide">
-        <View style={s.modalOverlay}>
-          <View style={s.modalCard}>
-            <View style={s.modalHandle} />
-            <Text style={s.modalTitle}>
-              Edit {editField === "name" ? "Full Name" : "Phone Number"}
-            </Text>
-            <TextInput
-              style={s.modalInput}
-              value={editValue}
-              onChangeText={setEditValue}
-              placeholder={
-                editField === "name" ? "Your full name" : "+91 98765 43210"
-              }
-              placeholderTextColor={Colors.textLight}
-              keyboardType={editField === "phone" ? "phone-pad" : "default"}
-              autoFocus
-            />
-            <View style={s.modalBtns}>
-              <TouchableOpacity
-                style={s.cancelBtn}
-                onPress={() => setEditField(null)}
-              >
-                <Text style={s.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.saveBtn, saving && { opacity: 0.6 }]}
-                onPress={handleSaveField}
-                disabled={saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color={Colors.white} size="small" />
-                ) : (
-                  <Text style={s.saveBtnText}>Save</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Change Password Modal */}
-      <Modal visible={showPwModal} transparent animationType="slide">
-        <View style={s.modalOverlay}>
-          <View style={s.modalCard}>
-            <View style={s.modalHandle} />
-            <Text style={s.modalTitle}>Change Password</Text>
-            <TextInput
-              style={s.modalInput}
-              value={newPw}
-              onChangeText={setNewPw}
-              placeholder="New password (min. 8 chars)"
-              placeholderTextColor={Colors.textLight}
-              secureTextEntry
-              autoFocus
-            />
-            <View style={s.modalBtns}>
-              <TouchableOpacity
-                style={s.cancelBtn}
-                onPress={() => {
-                  setShowPwModal(false);
-                  setNewPw("");
-                }}
-              >
-                <Text style={s.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[s.saveBtn, savingPw && { opacity: 0.6 }]}
-                onPress={handleChangePassword}
-                disabled={savingPw}
-              >
-                {savingPw ? (
-                  <ActivityIndicator color={Colors.white} size="small" />
-                ) : (
-                  <Text style={s.saveBtnText}>Update</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Pricing / Subscriptions Modal */}
+      {/* Pricing / Pro Membership Modal */}
       <PricingModal
         visible={showPricingModal}
         onClose={() => setShowPricingModal(false)}
         onSubscribeSuccess={() => setIsProUser(true)}
       />
+
+      {/* Primary Goal Modal */}
+      <PrimaryGoalModal
+        visible={showGoalModal}
+        userId={user?.id ?? ""}
+        initialGoal={primaryGoal}
+        allowDismiss={true}
+        onClose={() => setShowGoalModal(false)}
+        onGoalSaved={(savedGoal, targetRoute) => {
+          setPrimaryGoal(savedGoal);
+          setShowGoalModal(false);
+          const route = targetRoute || getRouteForPrimaryGoal(savedGoal);
+          router.replace(route as any);
+        }}
+      />
     </SafeAreaView>
   );
 }
 
-const s = StyleSheet.create({
-  proBadgeHeader: {
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+  },
+  centerContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FFFFFF",
+  },
+  header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 3,
-    backgroundColor: "rgba(245, 158, 11, 0.15)",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: "rgba(245, 158, 11, 0.3)",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
   },
-  proBadgeHeaderText: {
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: "700",
+    color: "#0F172A",
+  },
+  settingsIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  scrollContent: {
+    padding: 16,
+    gap: 16,
+    paddingBottom: 40,
+  },
+  userProfileHero: {
+    alignItems: "center",
+    paddingVertical: 8,
+    gap: 4,
+  },
+  avatarContainer: {
+    marginBottom: 8,
+  },
+  avatarCircle: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    backgroundColor: "#0A8554",
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#0A8554",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  avatarInitialsText: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
+  userNameText: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  userEmailText: {
+    fontSize: 13,
+    color: "#64748B",
+  },
+  vitalsRow: {
+    flexDirection: "row",
+    gap: 12,
+    justifyContent: "space-between",
+  },
+  vitalCard: {
+    flex: 1,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 18,
+    paddingVertical: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
+    gap: 2,
+  },
+  vitalValueText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#0F172A",
+  },
+  vitalLabelText: {
+    fontSize: 12,
+    color: "#64748B",
+  },
+
+  // ── Pro Banner ──
+  proBanner: {
+    borderRadius: 20,
+    backgroundColor: "#0D1F2D",
+    padding: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    overflow: "hidden",
+    gap: 12,
+    shadowColor: "#12879a",
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  proGlowTopRight: {
+    position: "absolute",
+    top: -30,
+    right: -30,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "rgba(18,135,154,0.35)",
+  },
+  proGlowBottomLeft: {
+    position: "absolute",
+    bottom: -20,
+    left: 20,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: "rgba(92,191,90,0.2)",
+  },
+  proBannerLeft: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  proIconCircle: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "rgba(245,158,11,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,0.3)",
+  },
+  proActiveBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    marginBottom: 2,
+  },
+  proActiveBadgeText: {
     fontSize: 10,
+    fontWeight: "800",
+    color: "#4ade80",
+    letterSpacing: 0.8,
+  },
+  proBannerTitle: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#FFFFFF",
+  },
+  proBannerSubtitle: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.6)",
+    marginTop: 2,
+  },
+  proCtaChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#ECFDF5",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+    gap: 2,
+  },
+  proCtaChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#0A8554",
+  },
+
+  menuCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+  },
+  menuRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F1F5F9",
+    gap: 12,
+  },
+  menuIconBg: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#ECFDF5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuTitleText: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#0F172A",
+  },
+  proMenuBadge: {
+    backgroundColor: "#FEF3C7",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  proMenuBadgeText: {
+    fontSize: 11,
     fontWeight: "800",
     color: "#d97706",
   },
-  proIconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: Radius.sm,
-    backgroundColor: "rgba(245, 158, 11, 0.12)",
-    alignItems: "center",
-    justifyContent: "center",
+  goalBadge: {
+    backgroundColor: "#ECFDF5",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginRight: 4,
   },
-  proBadgeUpgrade: {
-    backgroundColor: "#f59e0b",
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: Radius.full,
-  },
-  proBadgeUpgradeText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Colors.white,
-  },
-  proBadgeActive: {
-    backgroundColor: Colors.primaryLight,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: Radius.full,
-  },
-  proBadgeActiveText: {
-    fontSize: 9,
-    fontWeight: "800",
-    color: Colors.white,
-  },
-  flex: { flex: 1, backgroundColor: Colors.background },
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: Colors.background,
-  },
-  scroll: { padding: Spacing.lg, gap: Spacing.md },
-  avatarSection: {
-    alignItems: "center",
-    paddingVertical: Spacing.lg,
-    gap: Spacing.sm,
-  },
-  avatarCircle: {
-    width: 84,
-    height: 84,
-    borderRadius: 42,
-    backgroundColor: Colors.primaryLight,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: Colors.primaryLight,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
-    marginTop: -28,
-  },
-  avatarText: { fontSize: 32, fontWeight: "800", color: Colors.white },
-  displayName: {
-    fontSize: Fonts.sizes.xl,
-    fontWeight: "800",
-    color: Colors.textPrimary,
-  },
-  displayEmail: { fontSize: Fonts.sizes.xs, color: Colors.textMuted },
-  idBadge: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.full,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  idText: {
-    fontSize: Fonts.sizes.xs,
-    color: Colors.textMuted,
-    fontFamily: "monospace",
-  },
-  sectionCard: {
-    backgroundColor: Colors.white,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    overflow: "hidden",
-  },
-  sectionTitle: {
-    fontSize: Fonts.sizes.sm,
+  goalBadgeText: {
+    fontSize: 11,
     fontWeight: "700",
-    color: Colors.textMuted,
-    paddingHorizontal: Spacing.md,
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    color: "#0A8554",
   },
-  fieldRow: {
+  brandFooterCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: Spacing.md,
-    padding: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
+    backgroundColor: "#ECFDF5",
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+    gap: 12,
+    marginTop: 8,
   },
-  fieldInfo: { flex: 1 },
-  fieldLabel: {
-    fontSize: Fonts.sizes.xs,
-    color: Colors.textMuted,
-    fontWeight: "500",
-  },
-  fieldValue: {
-    fontSize: Fonts.sizes.sm,
-    color: Colors.textPrimary,
-    fontWeight: "600",
-    marginTop: 2,
-  },
-  aiDoctorBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    backgroundColor: '#E6F5F7',
-    borderRadius: Radius.lg,
-    padding: Spacing.md,
-    borderWidth: 1.5,
-    borderColor: '#0E7C86',
-  },
-  aiDoctorIconBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 12,
-    backgroundColor: '#CCECF0',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  aiDoctorContent: { flex: 1 },
-  aiDoctorTitle: {
-    fontSize: Fonts.sizes.md,
-    fontWeight: '800',
-    color: '#0B1F3A',
-  },
-  aiDoctorSubtitle: {
-    fontSize: Fonts.sizes.xs,
-    color: '#0E7C86',
-    marginTop: 2,
-    fontWeight: '500',
-  },
-  signOutBtn: {
-    flexDirection: "row",
+  brandFooterIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#D1FAE5",
     alignItems: "center",
     justifyContent: "center",
-    gap: Spacing.sm,
-    backgroundColor: Colors.white,
-    borderRadius: Radius.lg,
-    padding: Spacing.md,
-    borderWidth: 1.5,
-    borderColor: "#fecaca",
   },
-  signOutText: {
-    fontSize: Fonts.sizes.md,
+  brandFooterTitle: {
+    fontSize: 14,
     fontWeight: "700",
-    color: Colors.danger,
+    color: "#065F46",
   },
-  version: {
-    textAlign: "center",
-    fontSize: Fonts.sizes.xs,
-    color: Colors.textLight,
-    marginTop: Spacing.sm,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
-  },
-  modalCard: {
-    backgroundColor: Colors.white,
-    borderTopLeftRadius: Radius.xl,
-    borderTopRightRadius: Radius.xl,
-    padding: Spacing.lg,
-    gap: Spacing.md,
-  },
-  modalHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.border,
-    alignSelf: "center",
-  },
-  modalTitle: {
-    fontSize: Fonts.sizes.xl,
-    fontWeight: "800",
-    color: Colors.textPrimary,
-  },
-  modalInput: {
-    backgroundColor: Colors.surface,
-    borderRadius: Radius.md,
-    padding: Spacing.md,
-    fontSize: Fonts.sizes.md,
-    color: Colors.textPrimary,
-    borderWidth: 1.5,
-    borderColor: Colors.borderLight,
-  },
-  modalBtns: { flexDirection: "row", gap: Spacing.sm },
-  cancelBtn: {
-    flex: 1,
-    padding: 15,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surface,
-    alignItems: "center",
-  },
-  cancelText: { fontWeight: "700", color: Colors.textSecondary },
-  saveBtn: {
-    flex: 1,
-    padding: 15,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.primaryLight,
-    alignItems: "center",
-  },
-  saveBtnText: { fontWeight: "700", color: Colors.white },
-  footerContainer: {
-    backgroundColor: Colors.white,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    padding: 20,
-    gap: 14,
-    marginTop: 16,
-    marginBottom: -20,
-  },
-  footerTopRow: { flexDirection: "column", gap: 20, flexWrap: "wrap" },
-  footerLogoText: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: Colors.textPrimary,
-  },
-  footerDescText: {
+  brandFooterSub: {
     fontSize: 12,
-    color: Colors.textSecondary,
-    maxWidth: 300,
-    lineHeight: 16,
-  },
-  footerContactText: { fontSize: 12, color: Colors.textSecondary },
-  footerBottomDivider: { height: 1, backgroundColor: Colors.border },
-  footerBottomRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  footerCopyright: { fontSize: 11, color: Colors.textMuted },
-  footerLegalLink: { fontSize: 11, color: Colors.textSecondary },
-  googleBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: Spacing.sm,
-    paddingVertical: 14,
-    borderRadius: Radius.md,
-    borderWidth: 1.5,
-    borderColor: Colors.borderLight,
-    backgroundColor: Colors.white,
-    shadowColor: Colors.dark,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
-    marginTop: Spacing.xs,
-    marginBottom: Spacing.xs,
-  },
-  googleBtnDisabled: {
-    opacity: 0.5,
-  },
-  googleBtnText: {
-    fontSize: Fonts.sizes.md,
-    fontWeight: "700",
-    color: Colors.textPrimary,
+    color: "#047857",
   },
 });

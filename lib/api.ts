@@ -1,8 +1,6 @@
 import { supabase } from './supabase';
 import { WeightJourney, MealLog, SleepLog, WaterLog, MeasurementLog, StepLog, Referral, RewardTransaction, ReferralSummary, UserPlan, HealthProfile, DietPlan, ExercisePlan, BloodTestRequest, TestType } from './types';
 
-
-
 export type RecipeRecommendation = {
   name: string;
   calories: number;
@@ -85,6 +83,7 @@ export async function fetchUserPlans(userId: string): Promise<UserPlan | null> {
 // 3b. Save / Update User Plans & History directly in Supabase
 export async function saveUserPlans(userId: string, updates: Partial<UserPlan>): Promise<boolean> {
   try {
+    let planSaved = false;
     const existing = await fetchUserPlans(userId);
     if (existing && existing.id) {
       const { error } = await supabase
@@ -99,11 +98,12 @@ export async function saveUserPlans(userId: string, updates: Partial<UserPlan>):
         console.error('Error updating user_plans in Supabase:', error);
         return false;
       }
+      planSaved = true;
     } else {
       const { error } = await supabase
         .from('user_plans')
         .insert({
-          user_id: effectiveUserId,
+          user_id: userId,
           ...updates,
         });
 
@@ -118,7 +118,7 @@ export async function saveUserPlans(userId: string, updates: Partial<UserPlan>):
             ...updates,
             updated_at: new Date().toISOString(),
           })
-          .eq('user_id', effectiveUserId);
+          .eq('user_id', userId);
 
         if (!updateErr) {
           planSaved = true;
@@ -131,9 +131,9 @@ export async function saveUserPlans(userId: string, updates: Partial<UserPlan>):
     // 2. Dual-Sync / Backup: Always sync steps_history to users.weight_loss_journey
     if (updates.steps_history) {
       try {
-        const journey = await fetchUserJourney(effectiveUserId);
+        const journey = await fetchUserJourney(userId);
         const currentJourney = journey || { history: [] };
-        const journeySaved = await saveUserJourney(effectiveUserId, {
+        const journeySaved = await saveUserJourney(userId, {
           ...currentJourney,
           stepLogs: updates.steps_history,
         });

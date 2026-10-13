@@ -23,6 +23,7 @@ import { supabase } from '@/lib/supabase';
 import { safeWebBrowser, makeRedirectUri } from '@/lib/webBrowser';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { fetchUserPrimaryGoal, getRouteForPrimaryGoal } from '@/lib/primaryGoal';
 
 // Required for OAuth redirects on Android
 safeWebBrowser.maybeCompleteAuthSession();
@@ -98,7 +99,9 @@ export default function LoginScreen() {
               },
               { onConflict: 'id', ignoreDuplicates: true }
             );
-            router.replace('/(app)');
+            const goal = await fetchUserPrimaryGoal(user.id);
+            const destination = getRouteForPrimaryGoal(goal);
+            router.replace(destination as any);
             return;
           }
         }
@@ -123,7 +126,7 @@ export default function LoginScreen() {
   const handleLogin = async () => {
     if (!validate()) return;
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: authData, error } = await supabase.auth.signInWithPassword({
       email: email.trim().toLowerCase(),
       password,
     });
@@ -131,7 +134,10 @@ export default function LoginScreen() {
     if (error) {
       Alert.alert('Login Failed', error.message);
     } else {
-      router.replace('/(app)');
+      const uid = authData?.user?.id;
+      const goal = uid ? await fetchUserPrimaryGoal(uid) : null;
+      const destination = getRouteForPrimaryGoal(goal);
+      router.replace(destination as any);
     }
   };
 

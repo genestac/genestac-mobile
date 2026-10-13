@@ -24,6 +24,13 @@ export type WaterLog = {
 export type SleepLog = {
   date: string;
   hours: number;
+  source?: 'manual' | 'health_connect' | 'sensor_auto';
+  bedTime?: string;
+  wakeTime?: string;
+  quality?: 'Deep' | 'Restful' | 'Interrupted' | 'Light';
+  deepSleepHours?: number;
+  lightSleepHours?: number;
+  remSleepHours?: number;
 };
 
 export type MeasurementLog = {
@@ -47,6 +54,7 @@ export type StepLog = {
 };
 
 export type WeightJourney = {
+  startingWeight?: number;
   targetGoal?: number;
   history: WeightLog[];
   meals?: MealLog[];
@@ -73,6 +81,7 @@ export type UserProfile = {
   wallet_balance?: number;
   total_referrals_count?: number;
   total_earned?: number;
+  primary_goal?: string | null;
 };
 
 export type ReferralStatus = 'PENDING' | 'QUALIFIED' | 'REWARDED' | 'EXPIRED' | 'FRAUD_FLAGGED';

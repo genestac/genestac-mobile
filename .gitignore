@@ -44,5 +44,6 @@ yarn-error.*
 
 devlogs.md
 dev.js
+genestac_implementation_plan.md
 
 *.sql

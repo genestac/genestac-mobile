@@ -3,6 +3,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useRef } from 'react';
+import { NativeModules } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { trackNotificationOpen } from '@/lib/notifications';
 
@@ -62,24 +63,29 @@ export default function RootLayout() {
       // Fires when the user taps a notification rendered by Notifee (the
       // BigPicture image variant). Notifee passes the same `data` object that
       // was set on the notification when it was displayed.
-      try {
-        const notifee = (await import('@notifee/react-native')).default;
-        const { EventType } = await import('@notifee/react-native');
-        notifee.onForegroundEvent(({ type, detail }) => {
-          if (type === EventType.PRESS) {
-            const data = detail?.notification?.data ?? {};
-            const notifId = (data as any)?.notification_id as string | undefined;
-            if (notifId) {
-              trackNotificationOpen({
-                notification_id: notifId,
-                user_id: userIdRef.current,
-                screen: (data as any)?.screen ?? null,
-              });
-            }
+      if (NativeModules.NotifeeApiModule) {
+        try {
+          const notifeeModule = await import('@notifee/react-native');
+          const notifee = notifeeModule.default ?? notifeeModule;
+          const EventType = notifeeModule.EventType;
+          if (notifee?.onForegroundEvent && EventType) {
+            notifee.onForegroundEvent(({ type, detail }) => {
+              if (type === EventType.PRESS) {
+                const data = detail?.notification?.data ?? {};
+                const notifId = (data as any)?.notification_id as string | undefined;
+                if (notifId) {
+                  trackNotificationOpen({
+                    notification_id: notifId,
+                    user_id: userIdRef.current,
+                    screen: (data as any)?.screen ?? null,
+                  });
+                }
+              }
+            });
           }
-        });
-      } catch {
-        // @notifee/react-native unavailable
+        } catch {
+          // @notifee/react-native unavailable
+        }
       }
     }
 

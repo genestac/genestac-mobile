@@ -244,7 +244,7 @@ export default function RegisterScreen() {
               { onConflict: 'id', ignoreDuplicates: true }
             );
 
-            router.replace('/(app)');
+            router.replace('/(app)/dashboard');
             return;
           }
         }
@@ -293,7 +293,7 @@ export default function RegisterScreen() {
     setVerifyingOtp(false);
     setShowOtp(false);
     if (!signInError) {
-      router.replace('/(app)');
+      router.replace('/(app)/dashboard');
     } else {
       Alert.alert('Signed up!', 'Account verified. Please log in.');
       router.replace('/(auth)/login');

@@ -19,6 +19,8 @@ interface SleepTrackerWidgetProps {
   onOpenHistory?: () => void;
   onIncreaseSleep?: () => void;
   onDecreaseSleep?: () => void;
+  onTriggerAutoSync?: () => void;
+  isAutoSyncing?: boolean;
 }
 
 export const SleepTrackerWidget: React.FC<SleepTrackerWidgetProps> = ({
@@ -27,6 +29,8 @@ export const SleepTrackerWidget: React.FC<SleepTrackerWidgetProps> = ({
   onOpenHistory,
   onIncreaseSleep,
   onDecreaseSleep,
+  onTriggerAutoSync,
+  isAutoSyncing = false,
 }) => {
   const hours = todaySleep.hours;
   const targetHours = 12.0;
@@ -99,6 +103,18 @@ export const SleepTrackerWidget: React.FC<SleepTrackerWidgetProps> = ({
 
   const stage = getSleepStage();
 
+  const getSourceBadge = () => {
+    if (todaySleep.source === "health_connect") {
+      return { label: "Google Health", color: "#059669", bg: "#ECFDF5", icon: "fitness-outline" as const };
+    }
+    if (todaySleep.source === "sensor_auto") {
+      return { label: "Auto Sensors", color: "#6366F1", bg: "#EEF2FF", icon: "hardware-chip-outline" as const };
+    }
+    return null;
+  };
+
+  const sourceBadge = getSourceBadge();
+
   return (
     <View style={styles.trackerCardWidget}>
       {/* Header */}
@@ -107,10 +123,22 @@ export const SleepTrackerWidget: React.FC<SleepTrackerWidgetProps> = ({
           <Ionicons name="moon" size={16} color="#6366F1" />
           <Text style={styles.cardHeaderTitle}>Sleep Tracker</Text>
         </View>
-        <View style={[styles.indigoBadgeChip, { backgroundColor: stage.bg }]}>
-          <Text style={[styles.indigoBadgeText, { color: stage.color }]}>
-            {stage.label}
-          </Text>
+
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+          {sourceBadge && (
+            <View style={[styles.sourceBadgeChip, { backgroundColor: sourceBadge.bg }]}>
+              <Ionicons name={sourceBadge.icon} size={11} color={sourceBadge.color} />
+              <Text style={[styles.sourceBadgeText, { color: sourceBadge.color }]}>
+                {sourceBadge.label}
+              </Text>
+            </View>
+          )}
+
+          <View style={[styles.indigoBadgeChip, { backgroundColor: stage.bg }]}>
+            <Text style={[styles.indigoBadgeText, { color: stage.color }]}>
+              {stage.label}
+            </Text>
+          </View>
         </View>
       </View>
 
@@ -153,7 +181,7 @@ export const SleepTrackerWidget: React.FC<SleepTrackerWidgetProps> = ({
             />
           </Svg>
 
-          {/* Center Overlay Content (Matching Uploaded Image) */}
+          {/* Center Overlay Content */}
           <Animated.View
             style={[
               styles.ringInnerContent,
@@ -189,15 +217,48 @@ export const SleepTrackerWidget: React.FC<SleepTrackerWidgetProps> = ({
         </TouchableOpacity>
       </View>
 
+      {/* Sleep Bedtime and Waketime interval if auto-tracked */}
+      {(todaySleep.bedTime || todaySleep.wakeTime) && (
+        <View style={styles.sleepIntervalRow}>
+          <Ionicons name="bed-outline" size={13} color="#6366F1" />
+          <Text style={styles.sleepIntervalText}>
+            Bed: {todaySleep.bedTime || "11:15 PM"}
+          </Text>
+          <Ionicons name="arrow-forward" size={10} color="#94A3B8" />
+          <Ionicons name="sunny-outline" size={13} color="#D97706" />
+          <Text style={styles.sleepIntervalText}>
+            Wake: {todaySleep.wakeTime || "7:30 AM"}
+          </Text>
+        </View>
+      )}
+
       {/* Action Row */}
       <View style={styles.sleepActionRow}>
+        {onTriggerAutoSync && (
+          <TouchableOpacity
+            style={styles.sleepAutoSyncBtn}
+            onPress={onTriggerAutoSync}
+            disabled={isAutoSyncing}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name={isAutoSyncing ? "sync" : "flash-outline"}
+              size={14}
+              color="#FFFFFF"
+            />
+            <Text style={styles.sleepAutoSyncBtnText}>
+              {isAutoSyncing ? "Syncing..." : "Auto-Sync Android"}
+            </Text>
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity
           style={styles.sleepLogBtn}
           onPress={onLogSleep}
           activeOpacity={0.7}
         >
-          <Ionicons name="time-outline" size={15} color="#FFFFFF" />
-          <Text style={styles.sleepLogBtnText}>Log Sleep</Text>
+          <Ionicons name="create-outline" size={14} color="#6366F1" />
+          <Text style={styles.sleepLogBtnText}>Manual Log</Text>
         </TouchableOpacity>
 
         {onOpenHistory && (
@@ -206,7 +267,7 @@ export const SleepTrackerWidget: React.FC<SleepTrackerWidgetProps> = ({
             onPress={onOpenHistory}
             activeOpacity={0.7}
           >
-            <Ionicons name="calendar-outline" size={15} color="#6366F1" />
+            <Ionicons name="calendar-outline" size={14} color="#6366F1" />
             <Text style={styles.sleepHistoryBtnText}>History</Text>
           </TouchableOpacity>
         )}
@@ -218,10 +279,15 @@ export const SleepTrackerWidget: React.FC<SleepTrackerWidgetProps> = ({
 const styles = StyleSheet.create({
   trackerCardWidget: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 24,
+    padding: 18,
     borderWidth: 1,
     borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
   },
   trackerWidgetHeader: {
     flexDirection: "row",
@@ -304,6 +370,38 @@ const styles = StyleSheet.create({
     color: "#64748B",
     marginTop: 1,
   },
+  sourceBadgeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  sourceBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  sleepIntervalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignSelf: "center",
+    marginBottom: 8,
+    marginTop: -4,
+  },
+  sleepIntervalText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#475569",
+  },
   /* Action Row */
   sleepActionRow: {
     flexDirection: "row",
@@ -312,22 +410,27 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 4,
   },
-  sleepLogBtn: {
+  sleepAutoSyncBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 5,
     backgroundColor: "#6366F1",
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 8,
+    shadowColor: "#6366F1",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 2,
   },
-  sleepLogBtnText: {
-    fontSize: 13,
+  sleepAutoSyncBtnText: {
+    fontSize: 12,
     fontWeight: "700",
     color: "#FFFFFF",
   },
-  sleepHistoryBtn: {
+  sleepLogBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -339,10 +442,27 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 8,
   },
-  sleepHistoryBtnText: {
+  sleepLogBtnText: {
     fontSize: 12,
     fontWeight: "700",
     color: "#6366F1",
+  },
+  sleepHistoryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    backgroundColor: "#F8FAFC",
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  sleepHistoryBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#64748B",
   },
 });
 

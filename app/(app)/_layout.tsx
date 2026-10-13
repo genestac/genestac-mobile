@@ -4,6 +4,8 @@ import { StyleSheet, View, Text } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
 import { Colors } from "@/constants/colors";
+import { checkUserSubscription, UserSubscriptionStatus } from "@/lib/subscriptions";
+import { PricingModal } from "@/components/PricingModal";
 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Platform, TouchableOpacity, Alert, Modal } from "react-native";
@@ -65,6 +67,9 @@ export default function AppLayout() {
         getNotificationPreferences().then(syncAllNotifications).catch(console.error);
         // Register Expo push token with backend so AI Health Coach can send notifications
         registerExpoPushToken().catch(console.warn);
+        // Start background step tracking service immediately on login
+        const { initStepTracker } = require('@/lib/stepTracker');
+        initStepTracker().catch(console.warn);
       }
       setChecking(false);
     };
@@ -143,7 +148,7 @@ export default function AppLayout() {
               onPress={() => setShowPricingModal(true)}
               activeOpacity={0.85}
             >
-              <Text style={styles.renewBtnText}>Start ₹1 Trial & AutoPay</Text>
+              <Text style={styles.renewBtnText}>Start ₹1 (1 Month) Trial & AutoPay</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -178,84 +183,7 @@ export default function AppLayout() {
           }
         }}
       />
-      <Tabs.Screen
-        name="log"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="add-circle" focused={focused} label="Log" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="diet"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="restaurant" focused={focused} label="Diet" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="exercise"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="barbell" focused={focused} label="Exercise" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="steps"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="walk" focused={focused} label="Steps" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="referral"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="gift" focused={focused} label="Refer" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="person" focused={focused} label="Profile" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="badges"
-        options={{
-          href: null,
-        }}
-      />
-      {/* AI Health coach Welcome */}
-      <Tabs.Screen
-        name="ai-doctor-welcome"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="medkit" focused={focused} label="AI Doc" />
-          ),
-        }}
-      />
-      {/* AI Health coach Form (Hidden from Tab Bar) */}
-      <Tabs.Screen
-        name="ai-doctor"
-        options={{
-          href: null,
-        }}
-      />
-      {/* AI Health Coach Chat — Sarvam AI (Hidden from Tab Bar) */}
-      <Tabs.Screen
-        name="ai-doctor-chat"
-        options={{
-          href: null,
-        }}
-      />
-    </Tabs>
+    </View>
   );
 }
 
@@ -290,6 +218,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 16,
   },
+  expiredLockTitle: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#0F172A",
+    textAlign: "center",
+    marginBottom: 12,
+  },
+  tabItem: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 1,
+    width: "100%",
+  },
   tabLabel: {
     fontSize: 11,
     fontWeight: '600',
@@ -297,6 +238,10 @@ const styles = StyleSheet.create({
     marginTop: 1,
     textAlign: 'center',
     letterSpacing: -0.1,
+  },
+  tabLabelActive: {
+    color: Colors.primaryLight,
+    fontWeight: "700",
   },
   expiredLockText: {
     fontSize: 15,

@@ -1,9 +1,12 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
 import { router } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import TopNavbar from "@/components/dashboard/TopNavbar";
 import { CategoryCards } from "@/components/CategoryCards";
+import { VerticalGoalBottomNav } from "@/components/dashboard/VerticalGoalBottomNav";
+import { getPrimaryGoalInfo, fetchUserPrimaryGoal } from "@/lib/primaryGoal";
+import { supabase } from "@/lib/supabase";
 
 const HEART_DIABETES_PLANS = [
   "Blood pressure",
@@ -16,19 +19,51 @@ const HEART_DIABETES_PLANS = [
 ];
 
 export default function HeartDiabetesScreen() {
+  const [isUserPrimaryGoal, setIsUserPrimaryGoal] = useState(false);
+  const goalInfo = getPrimaryGoalInfo("Heart & Diabetes");
+
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const goal = await fetchUserPrimaryGoal(session.user.id);
+        const isGoal =
+          !!goal &&
+          (goal.toLowerCase().includes("heart") ||
+            goal.toLowerCase().includes("diabetes"));
+        setIsUserPrimaryGoal(isGoal);
+      }
+    });
+  }, []);
+
   return (
     <View style={styles.rootContainer}>
       <TopNavbar userName="User" />
       <View style={styles.subHeaderNavRow}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.push("/(app)")}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="arrow-back" size={20} color="#0F172A" />
-          <Text style={styles.backButtonText}>Back</Text>
-        </TouchableOpacity>
+        {!isUserPrimaryGoal ? (
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.push("/(app)")}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="arrow-back" size={20} color="#0F172A" />
+            <Text style={styles.backButtonText}>Back</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 8 }} />
+        )}
         <Text style={styles.headerCategoryTitle}>Heart & Diabetes</Text>
+        {isUserPrimaryGoal ? (
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.push("/(app)/dashboard/profile")}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="person-outline" size={16} color="#E11D48" />
+            <Text style={[styles.backButtonText, { color: "#E11D48" }]}>Profile</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 8 }} />
+        )}
       </View>
       <CategoryCards
         categoryTitle="Heart & Diabetes"
@@ -40,6 +75,9 @@ export default function HeartDiabetesScreen() {
         productsIcon="cart"
         treatmentPlans={HEART_DIABETES_PLANS}
       />
+      {isUserPrimaryGoal && (
+        <VerticalGoalBottomNav goal={goalInfo} activeTab="goal" />
+      )}
     </View>
   );
 }

@@ -1,188 +1,116 @@
-import React from "react";
-import { Tabs } from "expo-router";
-import { StyleSheet, View, Text, Platform } from "react-native";
-import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
-import { Colors } from "@/constants/colors";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import React, { useEffect, useState } from "react";
+import { Tabs, router, usePathname } from "expo-router";
+import { StyleSheet, View } from "react-native";
+import { supabase } from "@/lib/supabase";
+import { fetchUserPrimaryGoal, isWeightLossGoal, getRouteForPrimaryGoal } from "@/lib/primaryGoal";
+import { PrimaryGoalModal } from "@/components/PrimaryGoalModal";
+import { CustomBottomTabBar } from "@/components/dashboard/CustomBottomTabBar";
+import { QuickLogModal } from "@/components/dashboard/QuickLogModal";
 
-function TabIcon({
-  name,
-  focused,
-  label,
-}: {
-  name: string;
-  focused: boolean;
-  label: string;
-}) {
-  const isMCI = name.startsWith("mci:");
-  const baseName = isMCI ? name.replace("mci:", "") : name;
+export default function DashboardLayout() {
+  const pathname = usePathname();
+  const [showGoalModal, setShowGoalModal] = useState(false);
+  const [showQuickLogModal, setShowQuickLogModal] = useState(false);
+  const [userId, setUserId] = useState<string>("");
+  const [currentGoal, setCurrentGoal] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session?.user || !isMounted) return;
+      const uid = session.user.id;
+      setUserId(uid);
+      const goal = await fetchUserPrimaryGoal(uid);
+      if (isMounted) {
+        setCurrentGoal(goal);
+        if (!goal) {
+          setShowGoalModal(true);
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Guard: If user chose a non-weight goal, they should ONLY see their goal page & profile section!
+  useEffect(() => {
+    if (currentGoal && !isWeightLossGoal(currentGoal)) {
+      if (!pathname.includes("/profile")) {
+        router.replace(getRouteForPrimaryGoal(currentGoal) as any);
+      }
+    }
+  }, [currentGoal, pathname]);
 
   return (
-    <View style={styles.tabItem}>
-      {isMCI ? (
-        <MaterialCommunityIcons
-          name={(focused ? baseName : `${baseName}-outline`) as any}
-          size={20}
-          color={focused ? Colors.primaryLight : Colors.textMuted}
-        />
-      ) : (
-        <Ionicons
-          name={(focused ? baseName : `${baseName}-outline`) as any}
-          size={20}
-          color={focused ? Colors.primaryLight : Colors.textMuted}
-        />
-      )}
-      <Text
-        adjustsFontSizeToFit
-        style={[styles.tabLabel, focused && styles.tabLabelActive]}
+    <View style={{ flex: 1 }}>
+      <Tabs
+        tabBar={(props) => (
+          <CustomBottomTabBar
+            {...props}
+            primaryGoal={currentGoal}
+            onPressCenterButton={() => setShowQuickLogModal(true)}
+          />
+        )}
+        screenOptions={{
+          headerShown: false,
+        }}
       >
-        {label}
-      </Text>
+        {/* Tab 1: Home */}
+        <Tabs.Screen name="index" />
+
+        {/* Tab 2: Track (Weight, Steps, Sleep) */}
+        <Tabs.Screen name="track" />
+
+        {/* Tab 4: Plans (Treatment Plan, Diet & Nutrition, Exercise) */}
+        <Tabs.Screen name="plan" />
+
+        {/* Tab 5: Profile */}
+        <Tabs.Screen name="profile" />
+
+        {/* Hidden sub-routes accessible via in-app navigation */}
+        <Tabs.Screen name="consultation" options={{ href: null }} />
+        <Tabs.Screen name="shop" options={{ href: null }} />
+        <Tabs.Screen name="diet" options={{ href: null }} />
+        <Tabs.Screen name="exercise" options={{ href: null }} />
+        <Tabs.Screen name="steps" options={{ href: null }} />
+        <Tabs.Screen name="log" options={{ href: null }} />
+        <Tabs.Screen name="ai-doctor" options={{ href: null }} />
+        <Tabs.Screen name="page" options={{ href: null }} />
+        <Tabs.Screen name="badges" options={{ href: null }} />
+        <Tabs.Screen name="fasting" options={{ href: null }} />
+        <Tabs.Screen name="referral" options={{ href: null }} />
+        <Tabs.Screen name="referal" options={{ href: null }} />
+      </Tabs>
+
+      {/* Center Floating Plus Quick Log Modal */}
+      <QuickLogModal
+        visible={showQuickLogModal}
+        onClose={() => setShowQuickLogModal(false)}
+        onLoggedSuccess={(type) => {
+          // If weight was logged, can refresh track or home
+          if (type === 'weight') {
+            router.push('/(app)/dashboard/track?tab=weight' as any);
+          }
+        }}
+      />
+
+      {/* Primary Goal Selection Modal */}
+      <PrimaryGoalModal
+        visible={showGoalModal}
+        userId={userId}
+        initialGoal={currentGoal}
+        allowDismiss={false}
+        onClose={() => setShowGoalModal(false)}
+        onGoalSaved={(savedGoal, targetRoute) => {
+          setCurrentGoal(savedGoal);
+          setShowGoalModal(false);
+          router.replace(targetRoute as any);
+        }}
+      />
     </View>
   );
 }
 
-export default function DashboardLayout() {
-  const insets = useSafeAreaInsets();
-  const bottomInset = Math.max(
-    insets.bottom,
-    Platform.OS === "android" ? 8 : 0,
-  );
-
-  return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarStyle: {
-          ...styles.tabBar,
-          height: 56 + bottomInset,
-          paddingBottom: bottomInset > 0 ? bottomInset : 4,
-          paddingTop: 5,
-        },
-        tabBarItemStyle: styles.tabBarItem,
-        tabBarShowLabel: false,
-      }}
-    >
-      <Tabs.Screen
-        name="index"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="home" focused={focused} label="Home" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="log"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon
-              name="mci:file-document-edit"
-              focused={focused}
-              label="Log"
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="diet"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="restaurant" focused={focused} label="Diet" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="exercise"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="barbell" focused={focused} label="Exercise" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="steps"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="walk" focused={focused} label="Steps" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="referral"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="gift" focused={focused} label="Refer" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="person" focused={focused} label="Profile" />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="page"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="badges"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="fasting"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="referal"
-        options={{
-          href: null,
-        }}
-      />
-    </Tabs>
-  );
-}
-
-const styles = StyleSheet.create({
-  tabBar: {
-    backgroundColor: Colors.white,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
-    shadowColor: Colors.dark,
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  tabBarItem: {
-    paddingVertical: 2,
-    paddingHorizontal: 0,
-  },
-  tabItem: {
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 1,
-    width: "100%",
-  },
-  tabLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Colors.textMuted,
-    marginTop: 1,
-    textAlign: "center",
-    letterSpacing: -0.1,
-    width: 200,
-  },
-  tabLabelActive: {
-    color: Colors.primaryLight,
-    fontWeight: "700",
-  },
-});
+const styles = StyleSheet.create({});

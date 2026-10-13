@@ -286,10 +286,15 @@ export const WaterTrackerWidget: React.FC<WaterTrackerWidgetProps> = ({
 const styles = StyleSheet.create({
   trackerCardWidget: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 10,
-    padding: 14,
+    borderRadius: 24,
+    padding: 18,
     borderWidth: 1,
     borderColor: "#E2E8F0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
   },
   widgetHeaderRow: {
     flexDirection: "row",

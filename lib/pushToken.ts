@@ -27,7 +27,6 @@ export async function registerExpoPushToken(): Promise<void> {
       finalStatus = status;
     }
     if (finalStatus !== 'granted') {
-      console.log('[PushToken] Permission not granted — skipping registration');
       return;
     }
 
@@ -49,12 +48,8 @@ export async function registerExpoPushToken(): Promise<void> {
     const token: string = tokenData.data;
 
     if (!token || !token.startsWith('Exponent')) {
-      console.warn('[PushToken] Unexpected token format:', token);
       return;
     }
-
-    // 👇 Copy this token from Metro logs to test at expo.dev/notifications
-    console.log('[PushToken] Your Expo push token:', token);
 
     const res = await fetch(`${CRM_URL}/api/mobile/register-push-token`, {
       method: 'POST',
@@ -65,11 +60,8 @@ export async function registerExpoPushToken(): Promise<void> {
       body: JSON.stringify({ expo_push_token: token }),
     });
 
-    if (res.ok) {
-      console.log('[PushToken] ✅ Registered Expo push token with backend');
-    } else {
-      const body = await res.text().catch(() => '');
-      console.warn(`[PushToken] Backend registration failed: ${res.status}`, body);
+    if (!res.ok) {
+      // Backend registration failed silently
     }
   } catch (err) {
     // Never throw — this is a background operation

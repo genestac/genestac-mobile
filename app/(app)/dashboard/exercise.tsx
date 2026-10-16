@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import YoutubePlayer from 'react-native-youtube-iframe';
 import { supabase } from '@/lib/supabase';
 import { fetchUserPlans, generateAIUserPlans, updateDoctorReviewStatus } from '@/lib/api';
@@ -19,6 +20,8 @@ import { HealthProfile } from '@/lib/types';
 import { HealthProfileModal } from '@/components/HealthProfileModal';
 import { UnderDoctorReviewCard } from '@/components/UnderDoctorReviewCard';
 import { Colors, Fonts, Spacing, Radius } from '@/constants/colors';
+
+const GENESTAC_GRADIENT: readonly [string, string] = ['#12879a', '#5cbf5a'];
 
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
@@ -719,6 +722,25 @@ export function ExerciseContent({ embedded = false }: { embedded?: boolean }) {
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase();
   const [selectedDay, setSelectedDay] = useState(today);
 
+  const weekDays = useMemo(() => {
+    const now = new Date();
+    const currentDayIdx = (now.getDay() + 6) % 7;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() - currentDayIdx);
+
+    return DAYS.map((dayName, idx) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + idx);
+      const shortLabel =
+        dayName.slice(0, 3).charAt(0).toUpperCase() + dayName.slice(1, 3);
+      return {
+        day: dayName,
+        shortLabel,
+        dateNum: d.getDate(),
+      };
+    });
+  }, []);
+
   const fetchPlan = async () => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session?.user) {
@@ -839,13 +861,56 @@ export function ExerciseContent({ embedded = false }: { embedded?: boolean }) {
           <>
             {/* Day Selector */}
             {exercisePlan && (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.dayScroll}>
-                {DAYS.map(d => {
-                  const active = selectedDay === d;
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.dayScroll}
+              >
+                {weekDays.map((item) => {
+                  const active = selectedDay === item.day;
+                  const isToday = item.day === today;
                   return (
-                    <TouchableOpacity key={d} style={[s.dayBtn, active && s.dayBtnActive]} onPress={() => setSelectedDay(d)}>
-                      <Text style={[s.dayBtnText, active && s.dayBtnTextActive]}>{d.slice(0, 3).charAt(0).toUpperCase() + d.slice(1, 3)}</Text>
-                      {d === today && <View style={[s.todayDot, active && { backgroundColor: Colors.white }]} />}
+                    <TouchableOpacity
+                      key={item.day}
+                      activeOpacity={0.8}
+                      onPress={() => setSelectedDay(item.day)}
+                    >
+                      {active ? (
+                        <LinearGradient
+                          colors={GENESTAC_GRADIENT}
+                          start={{ x: 0, y: 0 }}
+                          end={{ x: 1, y: 1 }}
+                          style={s.dayBtnActive}
+                        >
+                          <Text style={s.dayNameTextActive}>
+                            {item.shortLabel}
+                          </Text>
+                          <Text style={s.dayNumTextActive}>
+                            {item.dateNum}
+                          </Text>
+                          <View
+                            style={[
+                              s.todayUnderline,
+                              isToday && s.todayUnderlineActive,
+                            ]}
+                          />
+                        </LinearGradient>
+                      ) : (
+                        <View style={s.dayBtn}>
+                          <Text style={s.dayNameText}>
+                            {item.shortLabel}
+                          </Text>
+                          <Text style={s.dayNumText}>
+                            {item.dateNum}
+                          </Text>
+                          <View
+                            style={[
+                              s.todayUnderline,
+                              isToday && s.todayUnderlineInactive,
+                            ]}
+                          />
+                        </View>
+                      )}
                     </TouchableOpacity>
                   );
                 })}
@@ -936,12 +1001,67 @@ const s = StyleSheet.create({
   headerIcon: { width: 38, height: 38, borderRadius: 19, backgroundColor: Colors.primaryLight, alignItems: 'center', justifyContent: 'center' },
   title: { fontSize: Fonts.sizes.lg, fontWeight: '800', color: Colors.textPrimary, letterSpacing: -0.3 },
   subtitle: { fontSize: Fonts.sizes.xs, color: Colors.textMuted },
-  dayScroll: { gap: 6, paddingVertical: 4, paddingHorizontal: Spacing.md },
-  dayBtn: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: Radius.full, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', gap: 2 },
-  dayBtnActive: { backgroundColor: Colors.primaryLight, borderColor: Colors.primaryLight },
-  dayBtnText: { fontSize: Fonts.sizes.xs, fontWeight: '700', color: Colors.textMuted },
-  dayBtnTextActive: { color: Colors.white },
-  todayDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.primaryLight },
+  dayScroll: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    flexGrow: 1,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 8,
+  },
+  dayBtn: {
+    width: 44,
+    height: 60,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: 'transparent',
+  },
+  dayBtnActive: {
+    width: 44,
+    height: 60,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    shadowColor: '#12879a',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  dayNameText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#64748B',
+  },
+  dayNameTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  dayNumText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  dayNumTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  todayUnderline: {
+    width: 14,
+    height: 2.5,
+    borderRadius: 2,
+    marginTop: 2,
+    backgroundColor: 'transparent',
+  },
+  todayUnderlineInactive: {
+    backgroundColor: '#12879a',
+  },
+  todayUnderlineActive: {
+    backgroundColor: '#FFFFFF',
+  },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 40, gap: 12, paddingHorizontal: Spacing.md },
   emptyIconWrap: {
     width: 72,

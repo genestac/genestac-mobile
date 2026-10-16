@@ -91,9 +91,9 @@ const formatDateLabel = (dateStr?: string) => {
 
 export default function TrackScreen() {
   const params = useLocalSearchParams();
-  const [activeTab, setActiveTab] = useState<"weight" | "steps" | "sleep">(
-    "weight",
-  );
+  const [activeTab, setActiveTab] = useState<
+    "weight" | "steps" | "sleep" | "water"
+  >("weight");
 
   // Time filter pills
   const [timeFilter, setTimeFilter] = useState<"Today" | "Week" | "Month">(
@@ -286,6 +286,8 @@ export default function TrackScreen() {
 
   // Water State
   const [waterAmount, setWaterAmount] = useState<number>(0.0);
+  const [waterHistory, setWaterHistory] = useState<WaterLog[]>([]);
+  const [isWaterHistoryExpanded, setIsWaterHistoryExpanded] = useState(false);
 
   // Body Measurements State
   const [waist, setWaist] = useState<string>("");
@@ -302,9 +304,14 @@ export default function TrackScreen() {
   useEffect(() => {
     if (params.tab === "steps") setActiveTab("steps");
     else if (params.tab === "sleep") setActiveTab("sleep");
-    else if (params.tab === "weight" || params.tab === "water")
+    else if (params.tab === "water") setActiveTab("water");
+    else if (params.tab === "weight") setActiveTab("weight");
+
+    if (params.log === "weight" || params.openModal === "weight") {
       setActiveTab("weight");
-  }, [params.tab]);
+      setShowWeightModal(true);
+    }
+  }, [params.tab, params.log, params.openModal, params.t]);
 
   // Load real weight, steps, sleep, water, measurements & habits from Supabase
   useEffect(() => {
@@ -380,6 +387,7 @@ export default function TrackScreen() {
 
       // ── WATER ──
       const waterLogs = planData?.water_history || journey?.waterLogs || [];
+      setWaterHistory(waterLogs);
       const todayWater = waterLogs.find((w: any) => w.date === todayStr);
       setWaterAmount(todayWater?.amount ?? 0);
 
@@ -417,9 +425,12 @@ export default function TrackScreen() {
             if (result.success && result.log.hours > 0) {
               setSleepHoursNum(result.log.hours);
               setSleepHours(`${result.log.hours}h`);
-              if (result.log.deepSleepHours) setDeepSleep(`${result.log.deepSleepHours}h`);
-              if (result.log.lightSleepHours) setLightSleep(`${result.log.lightSleepHours}h`);
-              if (result.log.remSleepHours) setRemSleep(`${result.log.remSleepHours}h`);
+              if (result.log.deepSleepHours)
+                setDeepSleep(`${result.log.deepSleepHours}h`);
+              if (result.log.lightSleepHours)
+                setLightSleep(`${result.log.lightSleepHours}h`);
+              if (result.log.remSleepHours)
+                setRemSleep(`${result.log.remSleepHours}h`);
               setTodaySleepObj(result.log);
             }
           })
@@ -451,11 +462,13 @@ export default function TrackScreen() {
     const today = new Date().toISOString().split("T")[0];
     const newTotal = parseFloat((waterAmount + amountToAdd).toFixed(2));
     setWaterAmount(newTotal);
-    const waterLogs = [...(journeyRef.current?.waterLogs || [])];
+    const currentLogs = journeyRef.current?.waterLogs || waterHistory || [];
+    const waterLogs = [...currentLogs];
     const idx = waterLogs.findIndex((w: any) => w.date === today);
-    if (idx >= 0) waterLogs[idx].amount = newTotal;
+    if (idx >= 0) waterLogs[idx] = { ...waterLogs[idx], amount: newTotal };
     else waterLogs.push({ date: today, amount: newTotal });
     journeyRef.current = { ...journeyRef.current, waterLogs };
+    setWaterHistory(waterLogs);
     if (userIdRef.current) {
       await saveUserWaterHistory(userIdRef.current, waterLogs);
     }
@@ -464,10 +477,12 @@ export default function TrackScreen() {
   const handleWaterReset = async () => {
     const today = new Date().toISOString().split("T")[0];
     setWaterAmount(0);
-    const waterLogs = [...(journeyRef.current?.waterLogs || [])];
+    const currentLogs = journeyRef.current?.waterLogs || waterHistory || [];
+    const waterLogs = [...currentLogs];
     const idx = waterLogs.findIndex((w: any) => w.date === today);
-    if (idx >= 0) waterLogs[idx].amount = 0;
+    if (idx >= 0) waterLogs[idx] = { ...waterLogs[idx], amount: 0 };
     journeyRef.current = { ...journeyRef.current, waterLogs };
+    setWaterHistory(waterLogs);
     if (userIdRef.current) {
       await saveUserWaterHistory(userIdRef.current, waterLogs);
     }
@@ -477,13 +492,19 @@ export default function TrackScreen() {
   const handleTriggerAutoSleepSync = async (silent = false) => {
     setIsAutoSyncingSleep(true);
     try {
-      const result = await syncAndroidAutoSleep(userIdRef.current || undefined, sleepHistory);
+      const result = await syncAndroidAutoSleep(
+        userIdRef.current || undefined,
+        sleepHistory,
+      );
       if (result.success) {
         setSleepHoursNum(result.log.hours);
         setSleepHours(`${result.log.hours}h`);
-        if (result.log.deepSleepHours) setDeepSleep(`${result.log.deepSleepHours}h`);
-        if (result.log.lightSleepHours) setLightSleep(`${result.log.lightSleepHours}h`);
-        if (result.log.remSleepHours) setRemSleep(`${result.log.remSleepHours}h`);
+        if (result.log.deepSleepHours)
+          setDeepSleep(`${result.log.deepSleepHours}h`);
+        if (result.log.lightSleepHours)
+          setLightSleep(`${result.log.lightSleepHours}h`);
+        if (result.log.remSleepHours)
+          setRemSleep(`${result.log.remSleepHours}h`);
         setTodaySleepObj(result.log);
 
         const today = result.log.date;
@@ -500,7 +521,10 @@ export default function TrackScreen() {
     } catch (err) {
       console.warn("Auto sleep sync error:", err);
       if (!silent) {
-        Alert.alert("Auto-Sync Notice", "Unable to sync automatically right now. You can log manually.");
+        Alert.alert(
+          "Auto-Sync Notice",
+          "Unable to sync automatically right now. You can log manually.",
+        );
       }
     } finally {
       setIsAutoSyncingSleep(false);
@@ -777,6 +801,30 @@ export default function TrackScreen() {
       : sortedSleepHistory.slice(0, 3);
   }, [sortedSleepHistory, isSleepHistoryExpanded]);
 
+  // Sorted Water History (Newest first, dynamically incorporating today's intake)
+  const sortedWaterHistory = useMemo(() => {
+    const list = [...waterHistory];
+    const todayStr = new Date().toISOString().split("T")[0];
+    const todayIdx = list.findIndex((w) => w.date?.startsWith(todayStr));
+    if (todayIdx < 0 && waterAmount > 0) {
+      list.push({
+        date: todayStr,
+        amount: waterAmount,
+      });
+    } else if (todayIdx >= 0) {
+      list[todayIdx] = { ...list[todayIdx], amount: waterAmount };
+    }
+    return list.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    );
+  }, [waterHistory, waterAmount]);
+
+  const displayedWaterHistory = useMemo(() => {
+    return isWaterHistoryExpanded
+      ? sortedWaterHistory
+      : sortedWaterHistory.slice(0, 3);
+  }, [sortedWaterHistory, isWaterHistoryExpanded]);
+
   // Dynamic Step Ring Calculation for Track Screen
   const stepRingSize = 170;
   const stepRingStroke = 9;
@@ -806,6 +854,7 @@ export default function TrackScreen() {
           {activeTab === "weight" && "Weight Management"}
           {activeTab === "steps" && "Steps"}
           {activeTab === "sleep" && "Sleep"}
+          {activeTab === "water" && "Water Hydration"}
         </Text>
 
         <TouchableOpacity style={styles.calendarIconBtn}>
@@ -880,14 +929,34 @@ export default function TrackScreen() {
             Sleep
           </Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.toggleBtn,
+            activeTab === "water" && styles.toggleBtnActive,
+          ]}
+          onPress={() => setActiveTab("water")}
+        >
+          <Ionicons
+            name="water-outline"
+            size={16}
+            color={activeTab === "water" ? "#0A8554" : "#64748B"}
+          />
+          <Text
+            style={[
+              styles.toggleBtnText,
+              activeTab === "water" && styles.toggleBtnTextActive,
+            ]}
+          >
+            Water
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        
-
         {/* ── 1. WEIGHT VIEW ── */}
         {activeTab === "weight" && (
           <View style={styles.weightTabCol}>
@@ -971,34 +1040,6 @@ export default function TrackScreen() {
               history={weightHistory}
               startWeight={startWeight}
               formatDateShort={formatDateShort}
-            />
-
-            {/* ── 4. WATER HYDRATION TRACKER ── */}
-            <WaterTrackerWidget
-              waterAmount={waterAmount}
-              onAddWater={handleWaterAdd}
-              onResetWater={handleWaterReset}
-            />
-
-            {/* ── 5. SLEEP TRACKER ── */}
-            <SleepTrackerWidget
-              todaySleep={{
-                ...todaySleepObj,
-                hours: sleepHoursNum,
-              }}
-              onLogSleep={handleSleepSave}
-              onIncreaseSleep={() => {
-                const next = parseFloat((sleepHoursNum + 0.5).toFixed(1));
-                setSleepHoursNum(next);
-                setTodaySleepObj((prev) => ({ ...prev, hours: next, source: "manual" }));
-              }}
-              onDecreaseSleep={() => {
-                const next = Math.max(0, parseFloat((sleepHoursNum - 0.5).toFixed(1)));
-                setSleepHoursNum(next);
-                setTodaySleepObj((prev) => ({ ...prev, hours: next, source: "manual" }));
-              }}
-              onTriggerAutoSync={() => handleTriggerAutoSleepSync(false)}
-              isAutoSyncing={isAutoSyncingSleep}
             />
 
             {/* ── 6. BODY MEASUREMENTS TRACKER ── */}
@@ -1142,7 +1183,11 @@ export default function TrackScreen() {
 
               {sortedStepHistory.length === 0 ? (
                 <View style={styles.emptyHistoryBox}>
-                  <Ionicons name="footsteps-outline" size={32} color="#94A3B8" />
+                  <Ionicons
+                    name="footsteps-outline"
+                    size={32}
+                    color="#94A3B8"
+                  />
                   <Text style={styles.emptyHistoryTitle}>No Step Logs Yet</Text>
                   <Text style={styles.emptyHistorySubtitle}>
                     Your daily steps will automatically log here as you walk.
@@ -1272,7 +1317,6 @@ export default function TrackScreen() {
         {/* ── 3. SLEEP VIEW (Screen 6) ── */}
         {activeTab === "sleep" && (
           <View style={styles.tabContentCol}>
-            
             {/* Sleep Logger Widget */}
             <SleepTrackerWidget
               todaySleep={{
@@ -1283,12 +1327,23 @@ export default function TrackScreen() {
               onIncreaseSleep={() => {
                 const next = parseFloat((sleepHoursNum + 0.5).toFixed(1));
                 setSleepHoursNum(next);
-                setTodaySleepObj((prev) => ({ ...prev, hours: next, source: "manual" }));
+                setTodaySleepObj((prev) => ({
+                  ...prev,
+                  hours: next,
+                  source: "manual",
+                }));
               }}
               onDecreaseSleep={() => {
-                const next = Math.max(0, parseFloat((sleepHoursNum - 0.5).toFixed(1)));
+                const next = Math.max(
+                  0,
+                  parseFloat((sleepHoursNum - 0.5).toFixed(1)),
+                );
                 setSleepHoursNum(next);
-                setTodaySleepObj((prev) => ({ ...prev, hours: next, source: "manual" }));
+                setTodaySleepObj((prev) => ({
+                  ...prev,
+                  hours: next,
+                  source: "manual",
+                }));
               }}
               onTriggerAutoSync={() => handleTriggerAutoSleepSync(false)}
               isAutoSyncing={isAutoSyncingSleep}
@@ -1358,10 +1413,7 @@ export default function TrackScreen() {
                   ]}
                 >
                   <Text
-                    style={[
-                      styles.historyCountPillText,
-                      { color: "#4F46E5" },
-                    ]}
+                    style={[styles.historyCountPillText, { color: "#4F46E5" }]}
                   >
                     {sortedSleepHistory.length}{" "}
                     {sortedSleepHistory.length === 1 ? "Log" : "Logs"}
@@ -1372,9 +1424,12 @@ export default function TrackScreen() {
               {sortedSleepHistory.length === 0 ? (
                 <View style={styles.emptyHistoryBox}>
                   <Ionicons name="moon-outline" size={32} color="#94A3B8" />
-                  <Text style={styles.emptyHistoryTitle}>No Sleep Logs Yet</Text>
+                  <Text style={styles.emptyHistoryTitle}>
+                    No Sleep Logs Yet
+                  </Text>
                   <Text style={styles.emptyHistorySubtitle}>
-                    Use the counter above and tap "Save Sleep" to record your sleep duration.
+                    Use the counter above and tap "Save Sleep" to record your
+                    sleep duration.
                   </Text>
                 </View>
               ) : (
@@ -1388,26 +1443,26 @@ export default function TrackScreen() {
                       hrs < 6
                         ? "#D97706"
                         : hrs > 9
-                        ? "#059669"
-                        : isOptimal
-                        ? "#6366F1"
-                        : "#2563EB";
+                          ? "#059669"
+                          : isOptimal
+                            ? "#6366F1"
+                            : "#2563EB";
                     const stageBg =
                       hrs < 6
                         ? "#FEF3C7"
                         : hrs > 9
-                        ? "#ECFDF5"
-                        : isOptimal
-                        ? "#EEF2FF"
-                        : "#EFF6FF";
+                          ? "#ECFDF5"
+                          : isOptimal
+                            ? "#EEF2FF"
+                            : "#EFF6FF";
                     const stageLabel =
                       hrs < 6
                         ? "Light Rest"
                         : hrs > 9
-                        ? "Extended"
-                        : isOptimal
-                        ? "Optimal"
-                        : "Good Rest";
+                          ? "Extended"
+                          : isOptimal
+                            ? "Optimal"
+                            : "Good Rest";
 
                     const sleepGoal = 8.0;
                     const percent = Math.min(
@@ -1512,6 +1567,254 @@ export default function TrackScreen() {
                         }
                         size={14}
                         color="#6366F1"
+                      />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* ── 4. WATER HYDRATION VIEW ── */}
+        {activeTab === "water" && (
+          <View style={styles.tabContentCol}>
+            {/* Water Hydration Tracker Widget */}
+            <WaterTrackerWidget
+              waterAmount={waterAmount}
+              onAddWater={handleWaterAdd}
+              onResetWater={handleWaterReset}
+              onOpenHistory={() => setIsWaterHistoryExpanded((prev) => !prev)}
+            />
+
+            {/* 3 Metrics Row */}
+            <View style={styles.metricsRow}>
+              <View style={styles.metricCard}>
+                <Ionicons name="water-outline" size={20} color="#2563EB" />
+                <Text style={styles.metricValue}>
+                  {waterAmount.toFixed(2)} L
+                </Text>
+                <Text style={styles.metricLabel}>Logged</Text>
+              </View>
+
+              <View style={styles.metricCard}>
+                <Ionicons name="flag-outline" size={20} color="#059669" />
+                <Text style={styles.metricValue}>2.75 L</Text>
+                <Text style={styles.metricLabel}>Target</Text>
+              </View>
+
+              <View style={styles.metricCard}>
+                <Ionicons name="hourglass-outline" size={20} color="#D97706" />
+                <Text style={styles.metricValue}>
+                  {Math.max(0, parseFloat((2.75 - waterAmount).toFixed(2)))} L
+                </Text>
+                <Text style={styles.metricLabel}>Remaining</Text>
+              </View>
+            </View>
+
+            {/* Motivational Banner */}
+            <View
+              style={[
+                styles.motivationalCard,
+                { backgroundColor: "#EFF6FF", borderColor: "#BFDBFE" },
+              ]}
+            >
+              <View
+                style={[
+                  styles.motivationalIconBg,
+                  { backgroundColor: "#DBEAFE" },
+                ]}
+              >
+                <Ionicons name="water" size={22} color="#2563EB" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.motivationalTitle, { color: "#1E40AF" }]}>
+                  Stay Hydrated
+                </Text>
+                <Text style={[styles.motivationalSub, { color: "#1D4ED8" }]}>
+                  Drinking water consistently supports metabolism, energy
+                  levels, and joint recovery.
+                </Text>
+              </View>
+            </View>
+
+            {/* ── WATER HISTORY SECTION ── */}
+            <View style={styles.historySectionCard}>
+              <View style={styles.historyHeaderRow}>
+                <TouchableOpacity
+                  style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+                  activeOpacity={0.7}
+                  onPress={() => setIsWaterHistoryExpanded((prev) => !prev)}
+                >
+                  <View
+                    style={[
+                      styles.historySectionIconWrap,
+                      { backgroundColor: "#EFF6FF" },
+                    ]}
+                  >
+                    <Ionicons name="water" size={16} color="#2563EB" />
+                  </View>
+                  <Text style={styles.historySectionTitle}>
+                    Hydration History
+                  </Text>
+                  <View
+                    style={[
+                      styles.historyChevronBtn,
+                      { backgroundColor: "#EFF6FF" },
+                    ]}
+                  >
+                    <Ionicons
+                      name={
+                        isWaterHistoryExpanded ? "chevron-up" : "chevron-down"
+                      }
+                      size={18}
+                      color="#2563EB"
+                    />
+                  </View>
+                </TouchableOpacity>
+                <View
+                  style={[
+                    styles.historyCountPill,
+                    { backgroundColor: "#EFF6FF" },
+                  ]}
+                >
+                  <Text
+                    style={[styles.historyCountPillText, { color: "#2563EB" }]}
+                  >
+                    {sortedWaterHistory.length}{" "}
+                    {sortedWaterHistory.length === 1 ? "Log" : "Logs"}
+                  </Text>
+                </View>
+              </View>
+
+              {sortedWaterHistory.length === 0 ? (
+                <View style={styles.emptyHistoryBox}>
+                  <Ionicons name="water-outline" size={32} color="#94A3B8" />
+                  <Text style={styles.emptyHistoryTitle}>
+                    No Hydration Logs Yet
+                  </Text>
+                  <Text style={styles.emptyHistorySubtitle}>
+                    Tap "+0.25L" or "+0.5L" above to record your daily water
+                    intake.
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.historyListCol}>
+                  {displayedWaterHistory.map((item, idx) => {
+                    const amt = item.amount ?? 0;
+                    const target = 2.75;
+                    const percent = Math.min(
+                      100,
+                      Math.round((amt / target) * 100),
+                    );
+                    const isGoalReached = amt >= target;
+                    const badgeColor = isGoalReached ? "#059669" : "#2563EB";
+                    const badgeBg = isGoalReached ? "#ECFDF5" : "#EFF6FF";
+                    const badgeLabel = isGoalReached
+                      ? "Goal Reached"
+                      : `${percent}% Target`;
+
+                    return (
+                      <View key={idx} style={styles.historyItemRow}>
+                        <View
+                          style={[
+                            styles.historyItemIconBg,
+                            { backgroundColor: badgeBg },
+                          ]}
+                        >
+                          <Ionicons
+                            name={isGoalReached ? "checkmark-circle" : "water"}
+                            size={18}
+                            color={badgeColor}
+                          />
+                        </View>
+
+                        <View style={{ flex: 1, gap: 4 }}>
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                            }}
+                          >
+                            <Text style={styles.historyItemDate}>
+                              {formatDateLabel(item.date)}
+                            </Text>
+                            <View
+                              style={[
+                                styles.sleepBadgeSmall,
+                                { backgroundColor: badgeBg },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.sleepBadgeSmallText,
+                                  { color: badgeColor },
+                                ]}
+                              >
+                                {badgeLabel}
+                              </Text>
+                            </View>
+                          </View>
+
+                          {/* Mini Progress Bar */}
+                          <View style={styles.historyMiniProgressBg}>
+                            <View
+                              style={[
+                                styles.historyMiniProgressFill,
+                                {
+                                  width: `${percent}%`,
+                                  backgroundColor: badgeColor,
+                                },
+                              ]}
+                            />
+                          </View>
+
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                            }}
+                          >
+                            <Text style={styles.historyItemMainVal}>
+                              {amt.toFixed(2)} L
+                              <Text style={styles.historyItemSubUnit}>
+                                {" "}
+                                (~{Math.round(amt * 4)} glasses)
+                              </Text>
+                            </Text>
+                            <Text style={styles.historyItemSubInfo}>
+                              Goal: {target}L ({percent}%)
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+
+                  {sortedWaterHistory.length > 3 && (
+                    <TouchableOpacity
+                      style={styles.expandToggleFooter}
+                      onPress={() => setIsWaterHistoryExpanded((prev) => !prev)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.expandToggleFooterText,
+                          { color: "#2563EB" },
+                        ]}
+                      >
+                        {isWaterHistoryExpanded
+                          ? "Show Less"
+                          : `View All ${sortedWaterHistory.length} Logs`}
+                      </Text>
+                      <Ionicons
+                        name={
+                          isWaterHistoryExpanded ? "chevron-up" : "chevron-down"
+                        }
+                        size={14}
+                        color="#2563EB"
                       />
                     </TouchableOpacity>
                   )}
@@ -1708,7 +2011,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 4,
     paddingVertical: 8,
     borderRadius: 10,
   },
@@ -1721,7 +2024,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   toggleBtnText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
     color: "#64748B",
   },

@@ -33,6 +33,7 @@ import {
   loadPainVisits,
   savePainVisit,
   generateAIClinicalSummary,
+  BODY_REGIONS,
 } from '@/lib/painMap';
 
 const PAIN_REGENERATION_PLANS = [

@@ -574,7 +574,7 @@ export default function DashboardHomeScreen() {
             ]}
             activeOpacity={0.8}
             onPress={() =>
-              router.push("/(app)/dashboard/track?tab=weight" as any)
+              router.push("/(app)/dashboard/track?tab=water" as any)
             }
           >
             <View

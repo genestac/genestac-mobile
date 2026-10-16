@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -8,11 +8,12 @@ import {
   TextInput,
   Alert,
   ActivityIndicator,
-  ScrollView,
+  Animated,
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Colors } from '@/constants/colors';
+import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { saveUserWaterHistory, saveUserSleepHistory, fetchUserPlans } from '@/lib/api';
 
@@ -21,6 +22,140 @@ interface QuickLogModalProps {
   onClose: () => void;
   onLoggedSuccess?: (type: string, data?: any) => void;
 }
+
+interface QuickLogItem {
+  id: string;
+  title: string;
+  subtitle: string;
+  badge: string;
+  icon: string;
+  cardGradient: [string, string];
+  borderColor: string;
+  badgeBg: string;
+  badgeText: string;
+  themeColor: string;
+  shadowColor: string;
+  onPress: () => void;
+}
+
+const AnimatedQuickCard: React.FC<{
+  item: QuickLogItem;
+  index: number;
+  visible: boolean;
+}> = ({ item, index, visible }) => {
+  const enterAnim = useRef(new Animated.Value(0)).current;
+  const pressScale = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (visible) {
+      enterAnim.setValue(0);
+      Animated.spring(enterAnim, {
+        toValue: 1,
+        tension: 65,
+        friction: 8,
+        delay: index * 60,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible, index]);
+
+  const handlePressIn = () => {
+    Animated.spring(pressScale, {
+      toValue: 0.93,
+      speed: 40,
+      bounciness: 4,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    Animated.spring(pressScale, {
+      toValue: 1,
+      speed: 25,
+      bounciness: 6,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const translateY = enterAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [28, 0],
+  });
+
+  const enterScale = enterAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.88, 1],
+  });
+
+  const opacity = enterAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.cardWrapper,
+        {
+          opacity,
+          transform: [
+            { translateY },
+            { scale: Animated.multiply(pressScale, enterScale) },
+          ],
+        },
+      ]}
+    >
+      <TouchableOpacity
+        activeOpacity={0.95}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        onPress={item.onPress}
+        style={[styles.cardTouchable, { shadowColor: item.shadowColor }]}
+      >
+        <LinearGradient
+          colors={item.cardGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[styles.cardGradient, { borderColor: item.borderColor }]}
+        >
+          {/* Top row: Icon Badge & Status Pill */}
+          <View style={styles.cardTopRow}>
+            <View
+              style={[
+                styles.cardIconBox,
+                {
+                  borderColor: item.themeColor,
+                  borderWidth: 1.5,
+                  backgroundColor: 'transparent',
+                },
+              ]}
+            >
+              <Ionicons name={item.icon as any} size={22} color={item.themeColor} />
+            </View>
+            <View style={[styles.badgePill, { backgroundColor: item.badgeBg }]}>
+              <Text style={[styles.badgePillText, { color: item.badgeText }]}>
+                {item.badge}
+              </Text>
+            </View>
+          </View>
+
+          {/* Bottom row: Title, Subtitle, and mini Action Arrow */}
+          <View style={styles.cardBottomRow}>
+            <View style={{ flex: 1, paddingRight: 4 }}>
+              <Text style={styles.cardTitle}>{item.title}</Text>
+              <Text style={styles.cardSubtitle} numberOfLines={1}>
+                {item.subtitle}
+              </Text>
+            </View>
+            <View style={[styles.miniArrowCircle, { backgroundColor: item.badgeBg }]}>
+              <Ionicons name="arrow-forward" size={13} color={item.badgeText} />
+            </View>
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
 
 export const QuickLogModal: React.FC<QuickLogModalProps> = ({
   visible,
@@ -37,6 +172,20 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({
   const [mealType, setMealType] = useState<'Breakfast' | 'Lunch' | 'Dinner' | 'Snacks'>('Breakfast');
   const [mealDesc, setMealDesc] = useState('');
   const [sleepHours, setSleepHours] = useState('7.5');
+
+  const sheetAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible) {
+      sheetAnim.setValue(0);
+      Animated.spring(sheetAnim, {
+        toValue: 1,
+        tension: 65,
+        friction: 9,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [visible]);
 
   if (!visible) return null;
 
@@ -65,7 +214,6 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({
       const uid = session.user.id;
       const today = new Date().toISOString();
 
-      // Read existing weight_loss_journey
       const { data: userData } = await supabase
         .from('users')
         .select('weight_loss_journey')
@@ -208,18 +356,114 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({
     }
   };
 
+  const menuItems: QuickLogItem[] = [
+    {
+      id: 'weight',
+      title: 'Weight',
+      subtitle: 'Daily check-in',
+      badge: '🎯 GOAL',
+      icon: 'scale-outline',
+      cardGradient: ['#F0FDF4', '#DCFCE7'],
+      borderColor: '#86EFAC',
+      badgeBg: '#DCFCE7',
+      badgeText: '#15803D',
+      themeColor: '#0A8554',
+      shadowColor: '#059669',
+      onPress: () => {
+        handleClose();
+        router.push(`/(app)/dashboard/track?tab=weight&log=weight&t=${Date.now()}` as any);
+      },
+    },
+    {
+      id: 'water',
+      title: 'Water',
+      subtitle: 'Track hydration',
+      badge: '💧 3.0L',
+      icon: 'water-outline',
+      cardGradient: ['#F0F9FF', '#E0F2FE'],
+      borderColor: '#7DD3FC',
+      badgeBg: '#E0F2FE',
+      badgeText: '#0369A1',
+      themeColor: '#0284C7',
+      shadowColor: '#0284C7',
+      onPress: () => {
+        handleClose();
+        router.push('/(app)/dashboard/track?tab=water' as any);
+      },
+    },
+    {
+      id: 'meal',
+      title: 'Meal Log',
+      subtitle: 'AI suggestions',
+      badge: '✨ AI MAGIC',
+      icon: 'restaurant-outline',
+      cardGradient: ['#FFFBEB', '#FEF3C7'],
+      borderColor: '#FCD34D',
+      badgeBg: '#FEF3C7',
+      badgeText: '#B45309',
+      themeColor: '#D97706',
+      shadowColor: '#D97706',
+      onPress: () => {
+        handleClose();
+        router.push('/(app)/dashboard/log' as any);
+      },
+    },
+    {
+      id: 'sleep',
+      title: 'Sleep',
+      subtitle: 'Rest & recovery',
+      badge: '🌙 RECHARGE',
+      icon: 'moon-outline',
+      cardGradient: ['#FAF5FF', '#F3E8FF'],
+      borderColor: '#D8B4FE',
+      badgeBg: '#F3E8FF',
+      badgeText: '#6B21A8',
+      themeColor: '#7C3AED',
+      shadowColor: '#7C3AED',
+      onPress: () => {
+        handleClose();
+        router.push('/(app)/dashboard/track?tab=sleep' as any);
+      },
+    },
+  ];
+
+  const sheetTranslateY = sheetAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [120, 0],
+  });
+
   return (
     <Modal
       visible={visible}
       transparent={true}
-      animationType="fade"
+      animationType="none"
       onRequestClose={handleClose}
     >
       <View style={styles.overlay}>
-        <View style={[styles.sheetContainer, { paddingBottom: Math.max(insets.bottom + 16, 32) }]}>
+        {/* Backdrop Tap */}
+        <TouchableOpacity
+          activeOpacity={1}
+          style={StyleSheet.absoluteFill}
+          onPress={handleClose}
+        />
+
+        <Animated.View
+          style={[
+            styles.sheetContainer,
+            {
+              paddingBottom: Math.max(insets.bottom + 16, 28),
+              transform: [{ translateY: sheetTranslateY }],
+            },
+          ]}
+        >
+          {/* Drag Pill Handle */}
+          <View style={styles.dragHandleContainer}>
+            <View style={styles.dragHandle} />
+          </View>
+
           {/* Header */}
           <View style={styles.sheetHeader}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
               {activeTab !== 'menu' && (
                 <TouchableOpacity
                   onPress={() => setActiveTab('menu')}
@@ -228,16 +472,23 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({
                   <Ionicons name="arrow-back" size={20} color="#0F172A" />
                 </TouchableOpacity>
               )}
-              <Text style={styles.sheetTitle}>
-                {activeTab === 'menu' && 'Quick Health Log'}
-                {activeTab === 'weight' && 'Log Your Weight'}
-                {activeTab === 'water' && 'Log Water Intake'}
-                {activeTab === 'meal' && 'Log a Meal'}
-                {activeTab === 'sleep' && 'Log Sleep Duration'}
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sheetTitle}>
+                  {activeTab === 'menu' && 'Quick Health Log'}
+                  {activeTab === 'weight' && 'Log Your Weight'}
+                  {activeTab === 'water' && 'Log Water Intake'}
+                  {activeTab === 'meal' && 'Log a Meal'}
+                  {activeTab === 'sleep' && 'Log Sleep Duration'}
+                </Text>
+                {activeTab === 'menu' && (
+                  <Text style={styles.sheetSubtitle}>
+                    Choose a metric to log or track
+                  </Text>
+                )}
+              </View>
             </View>
 
-            <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
+            <TouchableOpacity onPress={handleClose} style={styles.closeBtn} hitSlop={8}>
               <Ionicons name="close" size={20} color="#64748B" />
             </TouchableOpacity>
           </View>
@@ -245,53 +496,14 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({
           {/* MENU VIEW */}
           {activeTab === 'menu' && (
             <View style={styles.menuGrid}>
-              <TouchableOpacity
-                style={[styles.menuItemCard, { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' }]}
-                onPress={() => setActiveTab('weight')}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.menuIconBg, { backgroundColor: '#0A8554' }]}>
-                  <Ionicons name="scale-outline" size={24} color="#FFFFFF" />
-                </View>
-                <Text style={styles.menuItemTitle}>Weight</Text>
-                <Text style={styles.menuItemSubtitle}>Record daily kg</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.menuItemCard, { backgroundColor: '#E0F2FE', borderColor: '#BAE6FD' }]}
-                onPress={() => setActiveTab('water')}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.menuIconBg, { backgroundColor: '#0284C7' }]}>
-                  <Ionicons name="water-outline" size={24} color="#FFFFFF" />
-                </View>
-                <Text style={styles.menuItemTitle}>Water</Text>
-                <Text style={styles.menuItemSubtitle}>Track hydration</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.menuItemCard, { backgroundColor: '#FEF3C7', borderColor: '#FDE68A' }]}
-                onPress={() => setActiveTab('meal')}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.menuIconBg, { backgroundColor: '#D97706' }]}>
-                  <Ionicons name="nutrition-outline" size={24} color="#FFFFFF" />
-                </View>
-                <Text style={styles.menuItemTitle}>Meal</Text>
-                <Text style={styles.menuItemSubtitle}>Breakfast, lunch...</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.menuItemCard, { backgroundColor: '#F3E8FF', borderColor: '#DDD6FE' }]}
-                onPress={() => setActiveTab('sleep')}
-                activeOpacity={0.8}
-              >
-                <View style={[styles.menuIconBg, { backgroundColor: '#7C3AED' }]}>
-                  <Ionicons name="moon-outline" size={24} color="#FFFFFF" />
-                </View>
-                <Text style={styles.menuItemTitle}>Sleep</Text>
-                <Text style={styles.menuItemSubtitle}>Hours & recovery</Text>
-              </TouchableOpacity>
+              {menuItems.map((item, index) => (
+                <AnimatedQuickCard
+                  key={item.id}
+                  item={item}
+                  index={index}
+                  visible={visible}
+                />
+              ))}
             </View>
           )}
 
@@ -329,7 +541,7 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({
           {/* WATER FORM */}
           {activeTab === 'water' && (
             <View style={styles.formContent}>
-              <Text style={styles.inputLabel}>Select Volume</Text>
+              <Text style={styles.inputLabel}>Select Intake Amount</Text>
               <View style={styles.quickPillsRow}>
                 {['0.25', '0.5', '0.75', '1.0'].map((amt) => (
                   <TouchableOpacity
@@ -346,21 +558,21 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({
                         waterAmount === amt && styles.quickPillTextActive,
                       ]}
                     >
-                      +{amt} L
+                      +{amt}L
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
               <TouchableOpacity
-                style={[styles.primaryActionBtn, { backgroundColor: '#0284C7' }]}
+                style={styles.primaryActionBtn}
                 onPress={handleSaveWater}
                 disabled={loading}
               >
                 {loading ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.primaryActionBtnText}>Add +{waterAmount}L Water</Text>
+                  <Text style={styles.primaryActionBtnText}>Log Water</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -371,46 +583,48 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({
             <View style={styles.formContent}>
               <Text style={styles.inputLabel}>Meal Time</Text>
               <View style={styles.quickPillsRow}>
-                {(['Breakfast', 'Lunch', 'Dinner', 'Snacks'] as const).map((m) => (
+                {(['Breakfast', 'Lunch', 'Dinner', 'Snacks'] as const).map((t) => (
                   <TouchableOpacity
-                    key={m}
+                    key={t}
                     style={[
                       styles.quickPill,
-                      mealType === m && styles.quickPillActive,
+                      mealType === t && styles.quickPillActive,
                     ]}
-                    onPress={() => setMealType(m)}
+                    onPress={() => setMealType(t)}
                   >
                     <Text
                       style={[
                         styles.quickPillText,
-                        mealType === m && styles.quickPillTextActive,
+                        mealType === t && styles.quickPillTextActive,
                       ]}
                     >
-                      {m}
+                      {t}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
-              <Text style={[styles.inputLabel, { marginTop: 12 }]}>Meal Description</Text>
-              <TextInput
-                style={[styles.textInput, { height: 70, textAlignVertical: 'top' }]}
-                placeholder="e.g. Oats with Greek Yogurt & Blueberries"
-                placeholderTextColor="#94A3B8"
-                multiline
-                value={mealDesc}
-                onChangeText={setMealDesc}
-              />
+              <Text style={[styles.inputLabel, { marginTop: 8 }]}>What did you eat?</Text>
+              <View style={[styles.inputRow, { height: 'auto', minHeight: 64, paddingVertical: 8 }]}>
+                <TextInput
+                  style={[styles.textInput, { height: 'auto' }]}
+                  placeholder="e.g. 2 Chapatis, dal, mixed green salad"
+                  placeholderTextColor="#94A3B8"
+                  value={mealDesc}
+                  onChangeText={setMealDesc}
+                  multiline
+                />
+              </View>
 
               <TouchableOpacity
-                style={[styles.primaryActionBtn, { backgroundColor: '#D97706' }]}
+                style={styles.primaryActionBtn}
                 onPress={handleSaveMeal}
                 disabled={loading}
               >
                 {loading ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.primaryActionBtnText}>Save {mealType}</Text>
+                  <Text style={styles.primaryActionBtnText}>Save Meal</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -419,43 +633,43 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({
           {/* SLEEP FORM */}
           {activeTab === 'sleep' && (
             <View style={styles.formContent}>
-              <Text style={styles.inputLabel}>Last Night's Sleep (Hours)</Text>
+              <Text style={styles.inputLabel}>Sleep Duration</Text>
               <View style={styles.quickPillsRow}>
-                {['6.0', '7.0', '7.5', '8.0', '9.0'].map((h) => (
+                {['6.0', '7.0', '7.5', '8.0', '9.0'].map((hrs) => (
                   <TouchableOpacity
-                    key={h}
+                    key={hrs}
                     style={[
                       styles.quickPill,
-                      sleepHours === h && styles.quickPillActive,
+                      sleepHours === hrs && styles.quickPillActive,
                     ]}
-                    onPress={() => setSleepHours(h)}
+                    onPress={() => setSleepHours(hrs)}
                   >
                     <Text
                       style={[
                         styles.quickPillText,
-                        sleepHours === h && styles.quickPillTextActive,
+                        sleepHours === hrs && styles.quickPillTextActive,
                       ]}
                     >
-                      {h} h
+                      {hrs}h
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
 
               <TouchableOpacity
-                style={[styles.primaryActionBtn, { backgroundColor: '#7C3AED' }]}
+                style={styles.primaryActionBtn}
                 onPress={handleSaveSleep}
                 disabled={loading}
               >
                 {loading ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.primaryActionBtnText}>Record {sleepHours}h Sleep</Text>
+                  <Text style={styles.primaryActionBtnText}>Save Sleep</Text>
                 )}
               </TouchableOpacity>
             </View>
           )}
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -464,37 +678,59 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    padding: 20,
-    paddingBottom: 36,
+    paddingHorizontal: 18,
+    paddingTop: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 12,
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    elevation: 20,
+  },
+  dragHandleContainer: {
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  dragHandle: {
+    width: 38,
+    height: 4.5,
+    borderRadius: 3,
+    backgroundColor: '#E2E8F0',
   },
   sheetHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
-    paddingBottom: 12,
+    justifyContent: 'space-between',
+    paddingTop: 6,
+    paddingBottom: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#F1F5F9',
   },
   backIconBtn: {
-    padding: 4,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sheetTitle: {
     fontSize: 18,
     fontWeight: '800',
     color: '#0F172A',
+    letterSpacing: -0.3,
+  },
+  sheetSubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    marginTop: 2,
+    fontWeight: '500',
   },
   closeBtn: {
     width: 32,
@@ -508,36 +744,75 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
+    paddingTop: 16,
+    paddingBottom: 4,
     justifyContent: 'space-between',
   },
-  menuItemCard: {
+  cardWrapper: {
     width: '48%',
-    borderRadius: 20,
-    padding: 16,
-    borderWidth: 1,
-    alignItems: 'center',
-    gap: 6,
   },
-  menuIconBg: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+  cardTouchable: {
+    borderRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 4,
+  },
+  cardGradient: {
+    borderRadius: 20,
+    padding: 14,
+    borderWidth: 1.5,
+    gap: 12,
+  },
+  cardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  cardIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 4,
   },
-  menuItemTitle: {
-    fontSize: 15,
-    fontWeight: '700',
+  badgePill: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 999,
+  },
+  badgePillText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  cardBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
     color: '#0F172A',
+    letterSpacing: -0.2,
   },
-  menuItemSubtitle: {
-    fontSize: 12,
+  cardSubtitle: {
+    fontSize: 11.5,
     color: '#64748B',
+    fontWeight: '600',
+    marginTop: 2,
+  },
+  miniArrowCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   formContent: {
     gap: 12,
-    paddingVertical: 8,
+    paddingVertical: 14,
   },
   inputLabel: {
     fontSize: 13,

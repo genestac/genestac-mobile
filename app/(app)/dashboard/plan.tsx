@@ -8,6 +8,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { SafeLinearGradient as LinearGradient } from '@/components/ui/SafeLinearGradient';
 import { DietContent } from './diet';
 import { ExerciseContent } from './exercise';
 
@@ -53,20 +54,36 @@ export default function TreatmentPlanScreen() {
               onPress={() => setActiveTab(tab)}
               activeOpacity={0.8}
             >
-              <Ionicons
-                name={tab === 'Diet' ? 'restaurant-outline' : 'barbell-outline'}
-                size={16}
-                color={isActive ? '#0A8554' : '#64748B'}
-                style={{ marginRight: 6 }}
-              />
-              <Text
-                style={[
-                  styles.toggleBtnText,
-                  isActive && styles.toggleBtnTextActive,
-                ]}
-              >
-                {tab === 'Diet' ? 'Diet' : 'Exercise'}
-              </Text>
+              {isActive ? (
+                <LinearGradient
+                  colors={['#12879a', '#5cbf5a']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.toggleBtnGradient}
+                >
+                  <Ionicons
+                    name={tab === 'Diet' ? 'restaurant-outline' : 'barbell-outline'}
+                    size={16}
+                    color="#FFFFFF"
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={styles.toggleBtnTextActive}>
+                    {tab === 'Diet' ? 'Diet' : 'Exercise'}
+                  </Text>
+                </LinearGradient>
+              ) : (
+                <View style={styles.toggleBtnInner}>
+                  <Ionicons
+                    name={tab === 'Diet' ? 'restaurant-outline' : 'barbell-outline'}
+                    size={16}
+                    color="#64748B"
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text style={styles.toggleBtnText}>
+                    {tab === 'Diet' ? 'Diet' : 'Exercise'}
+                  </Text>
+                </View>
+              )}
             </TouchableOpacity>
           );
         })}
@@ -121,19 +138,29 @@ const styles = StyleSheet.create({
   },
   toggleBtn: {
     flex: 1,
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  toggleBtnActive: {
+    shadowColor: '#12879a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  toggleBtnGradient: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 9,
     borderRadius: 10,
   },
-  toggleBtnActive: {
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 2,
-    elevation: 2,
+  toggleBtnInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 9,
+    borderRadius: 10,
   },
   toggleBtnText: {
     fontSize: 13,
@@ -141,8 +168,9 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   toggleBtnTextActive: {
-    color: '#0A8554',
+    color: '#FFFFFF',
     fontWeight: '700',
+    fontSize: 13,
   },
   contentContainer: {
     flex: 1,

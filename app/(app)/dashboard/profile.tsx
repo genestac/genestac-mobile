@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { Colors } from "@/constants/colors";
 import { PricingModal } from "@/components/PricingModal";
@@ -36,8 +36,8 @@ export default function ProfileScreen() {
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [isProUser, setIsProUser] = useState(false);
 
-  useEffect(() => {
-    const load = async () => {
+  const loadProfileData = useCallback(async () => {
+    try {
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -49,30 +49,65 @@ export default function ProfileScreen() {
 
       const { data } = await supabase
         .from("users")
-        .select("name, email, phone, metadata, interested_plan_id, primary_goal, weight_loss_journey")
+        .select(
+          "name, email, phone, metadata, interested_plan_id, primary_goal, weight_loss_journey",
+        )
         .eq("id", session.user.id)
         .maybeSingle();
 
       setProfile(data);
       setPrimaryGoal(data?.primary_goal || "Weight Loss");
 
-      // Set vitals if present
+      // Set vitals - latest logged weight from history
       const journey = data?.weight_loss_journey;
-      if (journey?.history && journey.history.length > 0) {
-        setWeightKg(`${journey.history[0].weight} kg`);
+      const meta = data?.metadata;
+
+      if (Array.isArray(journey?.history) && journey.history.length > 0) {
+        // Sort descending by date to guarantee the most recent logged weight is displayed
+        const sortedHistory = [...journey.history].sort(
+          (a: any, b: any) =>
+            new Date(b.date).getTime() - new Date(a.date).getTime(),
+        );
+        const latestWeight = sortedHistory[0]?.weight;
+        if (latestWeight != null && !isNaN(Number(latestWeight))) {
+          const formatted = Number(latestWeight).toFixed(1).replace(/\.0$/, "");
+          setWeightKg(`${formatted} kg`);
+        }
+      } else if (journey?.startingWeight != null) {
+        const formatted = Number(journey.startingWeight).toFixed(1).replace(/\.0$/, "");
+        setWeightKg(`${formatted} kg`);
+      } else if (meta?.weight != null) {
+        const formatted = Number(meta.weight).toFixed(1).replace(/\.0$/, "");
+        setWeightKg(`${formatted} kg`);
+      }
+
+      if (meta?.height) {
+        setHeightCm(`${meta.height} cm`);
+      }
+      if (meta?.age) {
+        setAgeYrs(`${meta.age} yrs`);
       }
 
       // Check Pro status
-      const meta = data?.metadata;
       if (meta && typeof meta === "object" && meta.is_pro === true) {
         setIsProUser(true);
       }
-
+    } catch (err) {
+      console.error("Error loading profile data:", err);
+    } finally {
       setLoading(false);
-    };
-
-    load();
+    }
   }, []);
+
+  useEffect(() => {
+    loadProfileData();
+  }, [loadProfileData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadProfileData();
+    }, [loadProfileData]),
+  );
 
   const handleSignOut = () => {
     Alert.alert("Log Out", "Are you sure you want to log out of Genestac?", [
@@ -123,15 +158,17 @@ export default function ProfileScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* User Card: Avatar, Name, Email */}
+        {/* User Identity: Avatar, Name & Email (Center Aligned) */}
         <View style={styles.userProfileHero}>
-          <View style={styles.avatarContainer}>
-            <View style={styles.avatarCircle}>
-              <Text style={styles.avatarInitialsText}>{initials}</Text>
-            </View>
+          <View style={styles.avatarCircle}>
+            <Text style={styles.avatarInitialsText}>{initials}</Text>
           </View>
-          <Text style={styles.userNameText}>{name}</Text>
-          <Text style={styles.userEmailText}>{email}</Text>
+          <Text style={styles.userNameText} numberOfLines={1}>
+            {name}
+          </Text>
+          <Text style={styles.userEmailText} numberOfLines={1}>
+            {email}
+          </Text>
         </View>
 
         {/* 3 Vitals Stats Cards Row (Weight, Height, Age) */}
@@ -170,15 +207,25 @@ export default function ProfileScreen() {
               {isProUser ? (
                 <>
                   <View style={styles.proActiveBadge}>
-                    <Ionicons name="checkmark-circle" size={13} color="#4ade80" />
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={13}
+                      color="#4ade80"
+                    />
                     <Text style={styles.proActiveBadgeText}>PRO ACTIVE</Text>
                   </View>
-                  <Text style={styles.proBannerTitle}>{"You're a Pro Member \uD83C\uDF89"}</Text>
-                  <Text style={styles.proBannerSubtitle}>All premium features unlocked</Text>
+                  <Text style={styles.proBannerTitle}>
+                    {"You're a Pro Member \uD83C\uDF89"}
+                  </Text>
+                  <Text style={styles.proBannerSubtitle}>
+                    All premium features unlocked
+                  </Text>
                 </>
               ) : (
                 <>
-                  <Text style={styles.proBannerTitle}>Upgrade to Genestac Pro</Text>
+                  <Text style={styles.proBannerTitle}>
+                    Upgrade to Genestac Pro
+                  </Text>
                   <Text style={styles.proBannerSubtitle}>
                     Unlock advanced plans, AI coaching & more
                   </Text>
@@ -217,7 +264,11 @@ export default function ProfileScreen() {
             activeOpacity={0.7}
           >
             <View style={styles.menuIconBg}>
-              <Ionicons name="document-text-outline" size={20} color="#0A8554" />
+              <Ionicons
+                name="document-text-outline"
+                size={20}
+                color="#0A8554"
+              />
             </View>
             <Text style={styles.menuTitleText}>Health Reports</Text>
             <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
@@ -291,7 +342,9 @@ export default function ProfileScreen() {
           {/* Help & Support */}
           <TouchableOpacity
             style={styles.menuRow}
-            onPress={() => Alert.alert("Support", "Need help? Email care@genestac.com")}
+            onPress={() =>
+              Alert.alert("Support", "Need help? Email care@genestac.com")
+            }
             activeOpacity={0.7}
           >
             <View style={styles.menuIconBg}>
@@ -310,7 +363,9 @@ export default function ProfileScreen() {
             <View style={[styles.menuIconBg, { backgroundColor: "#FEE2E2" }]}>
               <Ionicons name="log-out-outline" size={20} color="#DC2626" />
             </View>
-            <Text style={[styles.menuTitleText, { color: "#DC2626" }]}>Log Out</Text>
+            <Text style={[styles.menuTitleText, { color: "#DC2626" }]}>
+              Log Out
+            </Text>
             <Ionicons name="chevron-forward" size={18} color="#F87171" />
           </TouchableOpacity>
         </View>
@@ -324,7 +379,9 @@ export default function ProfileScreen() {
             <Ionicons name="leaf" size={22} color="#0A8554" />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.brandFooterTitle}>Better health. Brighter you.</Text>
+            <Text style={styles.brandFooterTitle}>
+              Better health. Brighter you.
+            </Text>
             <Text style={styles.brandFooterSub}>Genestac</Text>
           </View>
         </View>
@@ -394,38 +451,40 @@ const styles = StyleSheet.create({
   },
   userProfileHero: {
     alignItems: "center",
-    paddingVertical: 8,
-    gap: 4,
-  },
-  avatarContainer: {
-    marginBottom: 8,
+    justifyContent: "center",
+    paddingVertical: 6,
+    gap: 3,
   },
   avatarCircle: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     backgroundColor: "#0A8554",
     alignItems: "center",
     justifyContent: "center",
+    marginBottom: 6,
     shadowColor: "#0A8554",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.22,
+    shadowRadius: 6,
     elevation: 4,
   },
   avatarInitialsText: {
-    fontSize: 26,
+    fontSize: 24,
     fontWeight: "800",
     color: "#FFFFFF",
   },
   userNameText: {
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: "800",
     color: "#0F172A",
+    letterSpacing: -0.3,
+    textAlign: "center",
   },
   userEmailText: {
     fontSize: 13,
     color: "#64748B",
+    textAlign: "center",
   },
   vitalsRow: {
     flexDirection: "row",
@@ -435,7 +494,7 @@ const styles = StyleSheet.create({
   vitalCard: {
     flex: 1,
     backgroundColor: "#FFFFFF",
-    borderRadius: 18,
+    borderRadius: 16,
     paddingVertical: 14,
     alignItems: "center",
     borderWidth: 1,
@@ -454,6 +513,7 @@ const styles = StyleSheet.create({
   },
   vitalLabelText: {
     fontSize: 12,
+    fontWeight: "600",
     color: "#64748B",
   },
 

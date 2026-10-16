@@ -4,7 +4,11 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import { isWeightLossGoal, getPrimaryGoalInfo } from '@/lib/primaryGoal';
+
+const GENESTAC_GRADIENT: readonly [string, string] = ['#12879a', '#5cbf5a'];
+const ACTIVE_TAB_COLOR = '#12879a';
 
 interface CustomBottomTabBarProps extends BottomTabBarProps {
   onPressCenterButton?: () => void;
@@ -78,10 +82,18 @@ export const CustomBottomTabBar: React.FC<CustomBottomTabBarProps> = ({
           activeOpacity={0.8}
           onPress={() => navigation.navigate('profile')}
         >
+          {currentRouteName === 'profile' && (
+            <LinearGradient
+              colors={GENESTAC_GRADIENT}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.activeTabIndicator}
+            />
+          )}
           <Ionicons
             name={currentRouteName === 'profile' ? 'person' : 'person-outline'}
             size={22}
-            color={currentRouteName === 'profile' ? '#0A8554' : '#94A3B8'}
+            color={currentRouteName === 'profile' ? ACTIVE_TAB_COLOR : '#94A3B8'}
           />
           <Text
             style={[
@@ -112,10 +124,18 @@ export const CustomBottomTabBar: React.FC<CustomBottomTabBarProps> = ({
         activeOpacity={0.8}
         onPress={() => navigation.navigate('index')}
       >
+        {currentRouteName === 'index' && (
+          <LinearGradient
+            colors={GENESTAC_GRADIENT}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.activeTabIndicator}
+          />
+        )}
         <Ionicons
           name={currentRouteName === 'index' ? 'home' : 'home-outline'}
           size={22}
-          color={currentRouteName === 'index' ? '#0A8554' : '#94A3B8'}
+          color={currentRouteName === 'index' ? ACTIVE_TAB_COLOR : '#94A3B8'}
         />
         <Text
           style={[
@@ -133,10 +153,18 @@ export const CustomBottomTabBar: React.FC<CustomBottomTabBarProps> = ({
         activeOpacity={0.8}
         onPress={() => navigation.navigate('track')}
       >
+        {currentRouteName === 'track' && (
+          <LinearGradient
+            colors={GENESTAC_GRADIENT}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.activeTabIndicator}
+          />
+        )}
         <Ionicons
           name={currentRouteName === 'track' ? 'compass' : 'compass-outline'}
           size={22}
-          color={currentRouteName === 'track' ? '#0A8554' : '#94A3B8'}
+          color={currentRouteName === 'track' ? ACTIVE_TAB_COLOR : '#94A3B8'}
         />
         <Text
           style={[
@@ -151,11 +179,17 @@ export const CustomBottomTabBar: React.FC<CustomBottomTabBarProps> = ({
       {/* 3. Center Elevated Circular Floating Button (+) */}
       <View style={styles.centerButtonContainer}>
         <TouchableOpacity
-          style={styles.centerButton}
           activeOpacity={0.85}
           onPress={onPressCenterButton}
         >
-          <Ionicons name="add" size={30} color="#FFFFFF" />
+          <LinearGradient
+            colors={GENESTAC_GRADIENT}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.centerButton}
+          >
+            <Ionicons name="add" size={30} color="#FFFFFF" />
+          </LinearGradient>
         </TouchableOpacity>
       </View>
 
@@ -165,10 +199,18 @@ export const CustomBottomTabBar: React.FC<CustomBottomTabBarProps> = ({
         activeOpacity={0.8}
         onPress={() => navigation.navigate('plan')}
       >
+        {currentRouteName === 'plan' && (
+          <LinearGradient
+            colors={GENESTAC_GRADIENT}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.activeTabIndicator}
+          />
+        )}
         <Ionicons
           name={currentRouteName === 'plan' ? 'clipboard' : 'clipboard-outline'}
           size={22}
-          color={currentRouteName === 'plan' ? '#0A8554' : '#94A3B8'}
+          color={currentRouteName === 'plan' ? ACTIVE_TAB_COLOR : '#94A3B8'}
         />
         <Text
           style={[
@@ -186,10 +228,18 @@ export const CustomBottomTabBar: React.FC<CustomBottomTabBarProps> = ({
         activeOpacity={0.8}
         onPress={() => navigation.navigate('profile')}
       >
+        {currentRouteName === 'profile' && (
+          <LinearGradient
+            colors={GENESTAC_GRADIENT}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.activeTabIndicator}
+          />
+        )}
         <Ionicons
           name={currentRouteName === 'profile' ? 'person' : 'person-outline'}
           size={22}
-          color={currentRouteName === 'profile' ? '#0A8554' : '#94A3B8'}
+          color={currentRouteName === 'profile' ? ACTIVE_TAB_COLOR : '#94A3B8'}
         />
         <Text
           style={[
@@ -234,8 +284,15 @@ const styles = StyleSheet.create({
     marginTop: 1,
   },
   tabLabelActive: {
-    color: '#0A8554',
+    color: '#12879a',
     fontWeight: '700',
+  },
+  activeTabIndicator: {
+    position: 'absolute',
+    top: -8,
+    width: 24,
+    height: 3,
+    borderRadius: 2,
   },
   centerButtonContainer: {
     alignItems: 'center',
@@ -248,10 +305,9 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: '#0A8554',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0A8554',
+    shadowColor: '#12879a',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.35,
     shadowRadius: 10,

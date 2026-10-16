@@ -1,5 +1,8 @@
 import { Platform } from 'react-native';
-import { NotificationPreferences } from './notificationStorage';
+import {
+  NotificationPreferences,
+  getStoredSupplementSchedules,
+} from './notificationStorage';
 
 const CRM_API_URL = process.env.EXPO_PUBLIC_CRM_API_URL ?? '';
 
@@ -279,23 +282,39 @@ export async function syncAllNotifications(
 
       // 6. Schedule Intermittent Fasting Reminders
       if (prefs.fastingRemindersEnabled) {
-        const startHour = prefs.fastingStartHour ?? 11; // 11 AM
-        const endHour = prefs.fastingEndHour ?? 19;     // 7 PM
+        const startHour = prefs.fastingStartHour ?? 12; // Eating window start
+        const endHour = prefs.fastingEndHour ?? 20;     // Eating window end
 
-        // Key Milestone & Hourly Reminders during Eating Window (11 AM to 7 PM)
-        for (let hour = startHour; hour <= endHour; hour++) {
-          let title = '🍽️ Fasting Window: Eating Time';
-          let body = 'Time to eat a balanced, wholesome meal or healthy snack!';
-          let minute = 30; // Mid-hour check-in at :30 (doesn't collide with Water :15 or Steps :50)
+        // Build list of eating window hours
+        const eatingHoursList: number[] = [];
+        if (startHour <= endHour) {
+          for (let h = startHour; h <= endHour; h++) {
+            eatingHoursList.push(h);
+          }
+        } else {
+          // Crosses midnight (e.g. 20 to 4)
+          for (let h = startHour; h < 24; h++) eatingHoursList.push(h);
+          for (let h = 0; h <= endHour; h++) eatingHoursList.push(h);
+        }
 
-          if (hour === 11) {
-            title = '🟢 Eating Window Open (11:00 AM)';
-            body = 'Your eating window is now open! Break your fast with a nutritious meal.';
-            minute = 0; // Top of hour for window start
-          } else if (hour === 19) {
-            title = '🔴 Fasting Window Starting (7:00 PM)';
-            body = 'Last call for food! Your 16-hour fasting window starts at 7:00 PM.';
-            minute = 0; // Top of hour for window start
+        // 1. Reminders every 1 hour during Eating Window
+        for (let i = 0; i < eatingHoursList.length; i++) {
+          const hour = eatingHoursList[i];
+          let title = '🍽️ Eating Window Reminder';
+          let body = 'Time to nourish your body with wholesome nutrition, lean proteins & healthy fats.';
+          let minute = 25; // 25 min offset
+
+          if (hour === startHour) {
+            title = `🟢 Eating Window Open (${formatTime(startHour, 0)})`;
+            body = 'Your eating window is now open! Break your fast with a nutritious, balanced meal.';
+            minute = 0;
+          } else if (hour === endHour) {
+            title = `🔴 Fasting Window Starting (${formatTime(endHour, 0)})`;
+            body = `Last call for food! Your fasting window starts now at ${formatTime(endHour, 0)}. Autophagy countdown begins!`;
+            minute = 0;
+          } else {
+            title = `🍽️ Eating Window Active (${formatTime(hour, 0)})`;
+            body = `Hour ${i} of your eating window. Stay hydrated and prioritize wholesome nutrition.`;
           }
 
           await Notifications.scheduleNotificationAsync({
@@ -313,22 +332,82 @@ export async function syncAllNotifications(
           });
         }
 
-        // Fasting Window Check-in Reminders (7 PM to 11 AM) at :30 past the hour
-        const fastingCheckHours = [20, 22, 8, 10]; // 8 PM, 10 PM, 8 AM, 10 AM
-        for (const hour of fastingCheckHours) {
+        // 2. Reminders every 2 hours during Fasting Window
+        // Fasting starts at endHour and runs until startHour
+        const fastingDurationHours = ((startHour - endHour + 24) % 24) || 16;
+        for (let elapsed = 2; elapsed < fastingDurationHours; elapsed += 2) {
+          const fastHour = (endHour + elapsed) % 24;
+
+          let title = `⚡ Fasting: ${elapsed}h Check-in`;
+          let body = 'Fasting in progress. Drink plenty of water or black coffee to stay sharp.';
+
+          if (elapsed === 2) {
+            title = '⚡ Fasting (2h): Digestion Resting';
+            body = 'Blood sugar and insulin levels are beginning to drop. Hydrate with pure water.';
+          } else if (elapsed === 4) {
+            title = '⚡ Fasting (4h): Glycogen Utilization';
+            body = 'Your digestive system is resting. Cells are shifting to energy conservation mode.';
+          } else if (elapsed === 6) {
+            title = '🔥 Fasting (6h): Fat Burn Initiating';
+            body = 'Liver glycogen reserves are dropping. Your body begins mobilizing stored fats.';
+          } else if (elapsed === 8) {
+            title = '🔥 Fasting (8h): Metabolic Shift';
+            body = 'Insulin is at baseline. Lipolysis and fatty acid breakdown are actively burning fat.';
+          } else if (elapsed === 10) {
+            title = '⚡ Fasting (10h): Ketone Rise';
+            body = 'Ketone body production is ramping up. Mental clarity and vitality are boosting!';
+          } else if (elapsed === 12) {
+            title = '🧬 Fasting (12h): Ketosis Induction';
+            body = 'Fat oxidation accelerating. Growth hormone levels are climbing steadily.';
+          } else if (elapsed === 14) {
+            title = '🧬 Fasting (14h): Cellular Cleanup';
+            body = 'Autophagy pathways are activating. Cells begin recycling damaged mitochondria.';
+          } else if (elapsed === 16) {
+            title = '✨ Fasting (16h): Peak Autophagy!';
+            body = 'Cellular senescence clearance is peaking! Lysosomes are recycling worn-out proteins.';
+          } else if (elapsed === 18) {
+            title = '✨ Fasting (18h): Deep Autophagy';
+            body = 'Deep cellular rejuvenation and mitochondrial reset in full gear.';
+          } else if (elapsed >= 20) {
+            title = `🏆 Fasting (${elapsed}h): Cellular Regeneration`;
+            body = `Stem cell renewal and deep metabolic reset active. You're almost at your eating window!`;
+          }
+
           await Notifications.scheduleNotificationAsync({
             content: {
-              title: '🔒 Fasting Window Active (7 PM - 11 AM)',
-              body: 'Fasting period in progress. Avoid meals & calories. Stay hydrated with plain water or black tea/coffee.',
+              title,
+              body,
               sound: true,
             },
             trigger: {
               type: Notifications.SchedulableTriggerInputTypes.DAILY,
-              hour,
-              minute: 30,
+              hour: fastHour,
+              minute: 0,
               channelId: 'lifestyle-reminders',
             },
           });
+        }
+      }
+
+      // 7. Schedule Daily Longevity Supplement Reminders
+      if (prefs.supplementRemindersEnabled !== false) {
+        const storedSupplements = await getStoredSupplementSchedules();
+        for (const item of storedSupplements) {
+          if (item.enabled) {
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: `💊 Time for ${item.name}`,
+                body: `Dose: ${item.dose}${item.role ? ` • ${item.role}` : ''}. Maintain your healthy longevity stack!`,
+                sound: true,
+              },
+              trigger: {
+                type: Notifications.SchedulableTriggerInputTypes.DAILY,
+                hour: item.hour,
+                minute: item.minute,
+                channelId: 'lifestyle-reminders',
+              },
+            });
+          }
         }
       }
     } catch {

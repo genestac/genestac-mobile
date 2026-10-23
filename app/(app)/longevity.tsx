@@ -30,6 +30,10 @@ import { getPrimaryGoalInfo, fetchUserPrimaryGoal } from "@/lib/primaryGoal";
 import { supabase } from "@/lib/supabase";
 import { SafeLinearGradient as LinearGradient } from "@/components/ui/SafeLinearGradient";
 import { LongevityAgeMeter } from "@/components/dashboard/LongevityAgeMeter";
+import { BiomarkerAgeUnlockCard } from "@/components/longevity/BiomarkerAgeUnlockCard";
+import { BookBiomarkerTestModal } from "@/components/longevity/BookBiomarkerTestModal";
+import { UploadBiomarkerReportModal } from "@/components/longevity/UploadBiomarkerReportModal";
+import { DEMO_HEALTHY_BIOMARKERS } from "@/constants/longevityBiomarkers";
 import {
   getNotificationPreferences,
   saveNotificationPreferences,
@@ -284,6 +288,11 @@ interface LongevityProfile {
   supplementsDone: Record<string, boolean>;
   supplementStreak: number;
   lastUpdatedDate: string;
+  hasBookedTest?: boolean;
+  hasUploadedReport?: boolean;
+  biomarkersData?: Record<string, number>;
+  lastTestBookedDate?: string;
+  reportUploadedDate?: string;
   // Assessment fields
   sleepHours?: "<6" | "6-7" | "7-8" | "8-9" | ">9";
   fitnessLevel?: number;
@@ -322,6 +331,9 @@ const DEFAULT_PROFILE: LongevityProfile = {
   },
   supplementStreak: 14,
   lastUpdatedDate: new Date().toISOString().split("T")[0],
+  hasBookedTest: false,
+  hasUploadedReport: false,
+  biomarkersData: DEMO_HEALTHY_BIOMARKERS,
   sleepHours: "7-8",
   fitnessLevel: 3,
   fastingDays: 5,
@@ -363,6 +375,12 @@ export default function LongevityScreen() {
   const [consultEmail, setConsultEmail] = useState("");
   const [consultNotes, setConsultNotes] = useState("");
   const [isSubmittingConsult, setIsSubmittingConsult] = useState(false);
+
+  // Longevity Biomarker Test & Report Upload Modals
+  const [showBookBiomarkerTestModal, setShowBookBiomarkerTestModal] =
+    useState(false);
+  const [showUploadBiomarkerReportModal, setShowUploadBiomarkerReportModal] =
+    useState(false);
 
   // Supplement Stack Customization States
   const [showAddSupplementModal, setShowAddSupplementModal] = useState(false);
@@ -691,6 +709,15 @@ export default function LongevityScreen() {
           ) {
             parsed.supplements = DEFAULT_SUPPLEMENTS;
           }
+          if (parsed.hasBookedTest === undefined) {
+            parsed.hasBookedTest = false;
+          }
+          if (parsed.hasUploadedReport === undefined) {
+            parsed.hasUploadedReport = false;
+          }
+          if (!parsed.biomarkersData) {
+            parsed.biomarkersData = DEMO_HEALTHY_BIOMARKERS;
+          }
           setProfile(parsed);
           setSelectedEatingStart(parsed.eatingStartHour ?? 12);
 
@@ -895,6 +922,60 @@ export default function LongevityScreen() {
     } catch (e) {
       console.log("Error saving longevity profile:", e);
     }
+  };
+
+  // Biomarker Test Booking & Report Upload Flow Handlers
+  const handleBookingBiomarkerSuccess = () => {
+    const updated: LongevityProfile = {
+      ...profile,
+      hasBookedTest: true,
+      lastTestBookedDate: new Date().toISOString(),
+    };
+    saveProfile(updated);
+  };
+
+  const handleReportUploadSuccess = (data: {
+    bioAge: number;
+    paceOfAging: number;
+    biomarkers: Record<string, number>;
+    fileName?: string;
+  }) => {
+    const updated: LongevityProfile = {
+      ...profile,
+      bioAge: data.bioAge,
+      paceOfAging: data.paceOfAging,
+      hasBookedTest: true,
+      hasUploadedReport: true,
+      biomarkersData: data.biomarkers,
+      reportUploadedDate: new Date().toISOString(),
+    };
+    saveProfile(updated);
+  };
+
+  const handleResetBiomarkerFlow = () => {
+    Alert.alert(
+      "Reset Biomarker Assessment Flow?",
+      "This will return the Longevity screen to the initial state ('Get your biomarkers checked' -> 'Book Test'). You can test booking and uploading again.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset Flow",
+          style: "destructive",
+          onPress: () => {
+            const updated: LongevityProfile = {
+              ...profile,
+              hasBookedTest: false,
+              hasUploadedReport: false,
+            };
+            saveProfile(updated);
+            Alert.alert(
+              "Flow Reset",
+              "Longevity assessment has been reset to the initial state."
+            );
+          },
+        },
+      ]
+    );
   };
 
   // Format supplement scheduled time (e.g. 8:00 AM)
@@ -1390,74 +1471,19 @@ export default function LongevityScreen() {
       >
         {activeTab === "dashboard" && (
           <>
-            {/* HERO BIOLOGICAL AGE & PACE OF AGING DIAL */}
-            <View style={styles.bioCard}>
-              <LinearGradient
-                colors={["#E2E2FF", "#D3D3FF", "#C6C6FF"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.bioCardGradient}
-              >
-                {/* Top Row: Title & DunedinPACE badge */}
-                <View style={styles.bioCardHeader}>
-                  <View>
-                    <Text style={styles.bioCardCategory}>EPIGENETIC CLOCK</Text>
-                    <Text style={styles.bioCardTitle}>Biological Age</Text>
-                  </View>
-                  <View style={styles.paceBadge}>
-                    <Text style={styles.paceBadgeLabel}>Pace of Aging</Text>
-                    <Text style={styles.paceBadgeValue}>
-                      {profile.paceOfAging}x/yr
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Speedometer Meter Gauge (matching weight loss meter) */}
-                <LongevityAgeMeter
-                  chronoAge={profile.chronoAge}
-                  bioAge={profile.bioAge}
-                  paceOfAging={profile.paceOfAging}
-                />
-
-                {/* Footer: Chrono vs Bio comparison & Recalculate button */}
-                <View style={styles.bioCardFooter}>
-                  <View style={styles.chronoInfoBox}>
-                    <Text style={styles.chronoInfoLabel}>
-                      Chronological Age
-                    </Text>
-                    <Text style={styles.chronoInfoValue}>
-                      {profile.chronoAge} Years
-                    </Text>
-                  </View>
-
-                  <TouchableOpacity
-                    style={styles.recalcBtn}
-                    onPress={() => setShowBioModal(true)}
-                    activeOpacity={0.8}
-                  >
-                    <Ionicons
-                      name="calculator-outline"
-                      size={15}
-                      color="#4F46E5"
-                    />
-                    <Text style={styles.recalcBtnText}>Test & Recalculate</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Accuracy & Clinical Disclaimer */}
-                <View style={styles.bioCardDisclaimer}>
-                  <Ionicons
-                    name="information-circle-outline"
-                    size={13}
-                    color="#4338CA"
-                  />
-                  <Text style={styles.bioCardDisclaimerText}>
-                    Estimate based on user-entered lifestyle parameters. Actual
-                    clinical lab tests may vary.
-                  </Text>
-                </View>
-              </LinearGradient>
-            </View>
+            {/* HERO BIOLOGICAL AGE & 9-BIOMARKER ASSESSMENT CARD */}
+            <BiomarkerAgeUnlockCard
+              chronoAge={profile.chronoAge}
+              bioAge={profile.bioAge}
+              paceOfAging={profile.paceOfAging}
+              hasBookedTest={profile.hasBookedTest}
+              hasUploadedReport={profile.hasUploadedReport}
+              biomarkersData={profile.biomarkersData}
+              onBookTest={() => setShowBookBiomarkerTestModal(true)}
+              onUploadReport={() => setShowUploadBiomarkerReportModal(true)}
+              onRecalculateLifestyle={() => setShowBioModal(true)}
+              onResetDemoFlow={handleResetBiomarkerFlow}
+            />
 
             {/* CELLULAR FASTING & AUTOPHAGY TIMER */}
             <View style={styles.fastingCard}>
@@ -3927,6 +3953,25 @@ export default function LongevityScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* MODAL 6: BOOK BIOMARKER TEST */}
+      <BookBiomarkerTestModal
+        visible={showBookBiomarkerTestModal}
+        onClose={() => setShowBookBiomarkerTestModal(false)}
+        onBookingSuccess={handleBookingBiomarkerSuccess}
+        initialName={consultName}
+        initialPhone={consultPhone}
+        initialAge={consultAge || String(profile.chronoAge)}
+      />
+
+      {/* MODAL 7: UPLOAD BIOMARKER REPORT & PHENOAGE CALCULATION */}
+      <UploadBiomarkerReportModal
+        visible={showUploadBiomarkerReportModal}
+        onClose={() => setShowUploadBiomarkerReportModal(false)}
+        chronoAge={profile.chronoAge}
+        initialBiomarkers={profile.biomarkersData}
+        onReportSuccess={handleReportUploadSuccess}
+      />
 
       {isUserPrimaryGoal && (
         <VerticalGoalBottomNav goal={goalInfo} activeTab="goal" />

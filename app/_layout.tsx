@@ -6,17 +6,42 @@ import { useEffect, useRef } from 'react';
 import { NativeModules } from 'react-native';
 import { supabase } from '@/lib/supabase';
 import { trackNotificationOpen } from '@/lib/notifications';
+import { initMetaTracking, trackAppInstall, setMetaUser } from '@/lib/metaPixel';
 
 export default function RootLayout() {
   const userIdRef = useRef<string | null>(null);
 
-  // Keep a ref to the current user ID so listeners can access it
+  // Initialize Meta Pixel tracking and track App Install (once per installation)
+  useEffect(() => {
+    initMetaTracking().catch(() => {});
+    trackAppInstall().catch(() => {});
+  }, []);
+
+  // Keep a ref to the current user ID so listeners can access it & update Meta Pixel user context
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      userIdRef.current = data?.session?.user?.id ?? null;
+      const user = data?.session?.user;
+      userIdRef.current = user?.id ?? null;
+      if (user) {
+        setMetaUser({
+          id: user.id,
+          email: user.email,
+          phone: user.phone,
+          name: user.user_metadata?.full_name,
+        }).catch(() => {});
+      }
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      userIdRef.current = session?.user?.id ?? null;
+      const user = session?.user;
+      userIdRef.current = user?.id ?? null;
+      if (user) {
+        setMetaUser({
+          id: user.id,
+          email: user.email,
+          phone: user.phone,
+          name: user.user_metadata?.full_name,
+        }).catch(() => {});
+      }
     });
     return () => listener.subscription.unsubscribe();
   }, []);

@@ -217,20 +217,6 @@ export const SleepTrackerWidget: React.FC<SleepTrackerWidgetProps> = ({
         </TouchableOpacity>
       </View>
 
-      {/* Sleep Bedtime and Waketime interval if auto-tracked */}
-      {(todaySleep.bedTime || todaySleep.wakeTime) && (
-        <View style={styles.sleepIntervalRow}>
-          <Ionicons name="bed-outline" size={13} color="#6366F1" />
-          <Text style={styles.sleepIntervalText}>
-            Bed: {todaySleep.bedTime || "11:15 PM"}
-          </Text>
-          <Ionicons name="arrow-forward" size={10} color="#94A3B8" />
-          <Ionicons name="sunny-outline" size={13} color="#D97706" />
-          <Text style={styles.sleepIntervalText}>
-            Wake: {todaySleep.wakeTime || "7:30 AM"}
-          </Text>
-        </View>
-      )}
 
       {/* Action Row */}
       <View style={styles.sleepActionRow}>
@@ -382,26 +368,7 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "700",
   },
-  sleepIntervalRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    backgroundColor: "#F8FAFC",
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    paddingVertical: 4,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    alignSelf: "center",
-    marginBottom: 8,
-    marginTop: -4,
-  },
-  sleepIntervalText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#475569",
-  },
+
   /* Action Row */
   sleepActionRow: {
     flexDirection: "row",

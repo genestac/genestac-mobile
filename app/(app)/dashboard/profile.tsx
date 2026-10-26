@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,7 +15,6 @@ import { router, useFocusEffect } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { Colors } from "@/constants/colors";
 import { PricingModal } from "@/components/PricingModal";
-import { PrimaryGoalModal } from "@/components/PrimaryGoalModal";
 import { NotificationSettingsCard } from "@/components/NotificationSettingsCard";
 import { getRouteForPrimaryGoal } from "@/lib/primaryGoal";
 
@@ -287,18 +287,6 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </TouchableOpacity>
 
-          {/* Buy Products */}
-          <TouchableOpacity
-            style={styles.menuRow}
-            onPress={() => router.push("/(app)/dashboard/shop")}
-            activeOpacity={0.7}
-          >
-            <View style={styles.menuIconBg}>
-              <Ionicons name="bag-handle-outline" size={20} color="#0A8554" />
-            </View>
-            <Text style={styles.menuTitleText}>Buy Products</Text>
-            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
-          </TouchableOpacity>
 
           {/* Subscription / Pro Plans */}
           <TouchableOpacity
@@ -319,25 +307,7 @@ export default function ProfileScreen() {
             )}
           </TouchableOpacity>
 
-          {/* Settings / Primary Goal */}
-          <TouchableOpacity
-            style={styles.menuRow}
-            onPress={() => setShowGoalModal(true)}
-            activeOpacity={0.7}
-          >
-            <View style={styles.menuIconBg}>
-              <Ionicons name="settings-outline" size={20} color="#0A8554" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.menuTitleText}>Settings & Primary Goal</Text>
-            </View>
-            {primaryGoal && (
-              <View style={styles.goalBadge}>
-                <Text style={styles.goalBadgeText}>{primaryGoal}</Text>
-              </View>
-            )}
-            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
-          </TouchableOpacity>
+          {/* Settings & Primary Goal hidden for now — will be re-enabled after other verticals are completed */}
 
           {/* Help & Support */}
           <TouchableOpacity
@@ -376,7 +346,11 @@ export default function ProfileScreen() {
         {/* Footer Brand Card */}
         <View style={styles.brandFooterCard}>
           <View style={styles.brandFooterIconCircle}>
-            <Ionicons name="leaf" size={22} color="#0A8554" />
+            <Image
+              source={require("@/assets/images/brand/logo.png")}
+              style={styles.brandFooterLogo}
+              resizeMode="contain"
+            />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.brandFooterTitle}>
@@ -392,21 +366,6 @@ export default function ProfileScreen() {
         visible={showPricingModal}
         onClose={() => setShowPricingModal(false)}
         onSubscribeSuccess={() => setIsProUser(true)}
-      />
-
-      {/* Primary Goal Modal */}
-      <PrimaryGoalModal
-        visible={showGoalModal}
-        userId={user?.id ?? ""}
-        initialGoal={primaryGoal}
-        allowDismiss={true}
-        onClose={() => setShowGoalModal(false)}
-        onGoalSaved={(savedGoal, targetRoute) => {
-          setPrimaryGoal(savedGoal);
-          setShowGoalModal(false);
-          const route = targetRoute || getRouteForPrimaryGoal(savedGoal);
-          router.replace(route as any);
-        }}
       />
     </SafeAreaView>
   );
@@ -668,12 +627,18 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   brandFooterIconCircle: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#D1FAE5",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
+  },
+  brandFooterLogo: {
+    width: 28,
+    height: 28,
   },
   brandFooterTitle: {
     fontSize: 14,

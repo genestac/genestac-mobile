@@ -101,57 +101,21 @@ export const PRIMARY_GOAL_OPTIONS: PrimaryGoalOption[] = [
 /**
  * Map goal title to corresponding router destination
  */
-export function getRouteForPrimaryGoal(goal: string | null | undefined): string {
-  if (!goal) return '/(app)/dashboard';
-  const clean = goal.trim().toLowerCase();
-
-  if (
-    clean.includes('weight') ||
-    clean.includes('fatloss') ||
-    clean.includes('fat loss') ||
-    clean === 'weight loss'
-  ) {
-    return '/(app)/dashboard';
-  }
-
-  if (clean.includes('longevity')) {
-    return '/(app)/longevity';
-  }
-
-  if (
-    clean.includes('heart') ||
-    clean.includes('diabetes') ||
-    clean.includes('heat')
-  ) {
-    return '/(app)/heart-diabetes';
-  }
-
-  if (clean.includes('hair') || clean.includes('hai')) {
-    return '/(app)/hair-treatment';
-  }
-
-  if (clean.includes('skin') || clean.includes('laser')) {
-    return '/(app)/skin-laser-treatment';
-  }
-
-  if (clean.includes('pain') || clean.includes('regeneration')) {
-    return '/(app)/pain-regeneration';
-  }
-
+/**
+ * Map goal title to corresponding router destination.
+ * Note: Other verticals are currently in development, so this always resolves
+ * to the production-ready Weight Loss dashboard.
+ */
+export function getRouteForPrimaryGoal(goal?: string | null | undefined): string {
   return '/(app)/dashboard';
 }
 
 /**
- * Check if the given goal represents Weight Loss
+ * Check if the given goal represents Weight Loss.
+ * Always returns true in production while other verticals are in development.
  */
-export function isWeightLossGoal(goal: string | null | undefined): boolean {
-  if (!goal) return true;
-  const clean = goal.trim().toLowerCase();
-  return (
-    clean.includes('weight') ||
-    clean.includes('fatloss') ||
-    clean.includes('fat loss')
-  );
+export function isWeightLossGoal(goal?: string | null | undefined): boolean {
+  return true;
 }
 
 /**

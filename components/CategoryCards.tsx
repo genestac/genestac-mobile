@@ -21,6 +21,7 @@ import {
   LongevityPlanSection,
   LongevityPlanItem,
 } from "@/constants/longevityPlans";
+import { trackBookConsultation } from "@/lib/metaPixel";
 
 interface CategoryCardsProps {
   categoryTitle: string;
@@ -245,6 +246,16 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
 
       setShowModal(false);
       setSelectedPlanTitle("");
+
+      // Meta Tracking: Book Consultation event
+      trackBookConsultation({
+        doctorId: doctorId || undefined,
+        doctorName: selectedPlanTitle ? `Genestac: ${selectedPlanTitle}` : `Genestac ${categoryTitle} Specialist`,
+        specialty: categoryTitle,
+        fee: 0,
+        appointmentDate: scheduledAt,
+      }).catch(() => {});
+
       Alert.alert(
         "Consultation Booked",
         selectedPlanTitle
@@ -290,29 +301,6 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
         </TouchableOpacity>
       </View>
 
-      {/* Card 2: Buy Your Products */}
-      <View style={styles.card}>
-        <View style={styles.cardHeaderRow}>
-          <View style={[styles.iconCircle, { backgroundColor: "#05966915" }]}>
-            <Ionicons name={productsIcon} size={22} color="#059669" />
-          </View>
-          <View style={styles.headerTextWrap}>
-            <Text style={[styles.cardTag, { color: "#059669" }]}>CURATED CARE KITS & PRODUCTS</Text>
-            <Text style={styles.cardTitle}>Buy Your Products</Text>
-          </View>
-        </View>
-
-        <Text style={styles.cardSubtitle}>{productsSubtitle}</Text>
-
-        <TouchableOpacity
-          style={[styles.primaryBtn, { backgroundColor: "#059669" }]}
-          onPress={handleBuyProducts}
-          activeOpacity={0.85}
-        >
-          <Text style={styles.primaryBtnText}>Buy Products</Text>
-          <Ionicons name="bag-handle" size={15} color="#FFFFFF" />
-        </TouchableOpacity>
-      </View>
 
       {/* Card 3: Treatment Plans */}
       <View style={styles.card}>

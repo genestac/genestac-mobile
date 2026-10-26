@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Stack, router } from "expo-router";
-import { StyleSheet, View, Text } from "react-native";
+import { StyleSheet, View, Text, AppState, ActivityIndicator, Platform, TouchableOpacity, Alert, Modal } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
 import { Colors } from "@/constants/colors";
@@ -8,8 +8,6 @@ import { checkUserSubscription, UserSubscriptionStatus } from "@/lib/subscriptio
 import { PricingModal } from "@/components/PricingModal";
 
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Platform, TouchableOpacity, Alert, Modal } from "react-native";
-
 import { syncAllNotifications } from '@/lib/notifications';
 import { registerExpoPushToken } from '@/lib/pushToken';
 
@@ -54,15 +52,23 @@ export default function AppLayout() {
   const [showPricingModal, setShowPricingModal] = useState(false);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.user) {
-        setTimeout(() => {
-          router.replace("/(auth)/login");
-        }, 0);
-      } else {
+    const checkAuthAndSubscription = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (!session?.user) {
+          setTimeout(() => {
+            router.replace("/(auth)/login");
+          }, 0);
+          setChecking(false);
+          return;
+        }
+
+        // Verify active subscription before allowing app usage
+        const status = await checkUserSubscription(session.user.id);
+        setSubStatus(status);
+
         const { getNotificationPreferences } = require('@/lib/notificationStorage');
         getNotificationPreferences().then(syncAllNotifications).catch(console.error);
         // Register Expo push token with backend so AI Health Coach can send notifications
@@ -70,10 +76,26 @@ export default function AppLayout() {
         // Start background step tracking service immediately on login
         const { initStepTracker } = require('@/lib/stepTracker');
         initStepTracker().catch(console.warn);
+      } catch (err) {
+        console.error("Auth and subscription check failed:", err);
+      } finally {
+        setChecking(false);
       }
-      setChecking(false);
     };
-    checkAuth();
+    checkAuthAndSubscription();
+
+    // Re-check subscription when app comes into foreground (e.g. returning from UPI app)
+    const appStateSub = AppState.addEventListener('change', async (nextState) => {
+      if (nextState === 'active') {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          try {
+            const status = await checkUserSubscription(session.user.id);
+            setSubStatus(status);
+          } catch { }
+        }
+      }
+    });
 
     // Listen for notification taps → report open event to backend for analytics
     let notifSub: any = null;
@@ -91,21 +113,34 @@ export default function AppLayout() {
       });
     } catch { }
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (!session) {
+        setSubStatus(null);
         setTimeout(() => {
           router.replace('/(auth)/login');
         }, 0);
+      } else {
+        try {
+          const status = await checkUserSubscription(session.user.id);
+          setSubStatus(status);
+        } catch { }
       }
     });
 
     return () => {
+      appStateSub.remove();
       listener.subscription.unsubscribe();
       notifSub?.remove?.();
     };
   }, []);
 
-  if (checking) return null;
+  if (checking) {
+    return (
+      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#f2f6f7" }}>
+        <ActivityIndicator color={Colors.primaryLight} size="large" />
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1 }}>
@@ -122,7 +157,9 @@ export default function AppLayout() {
       {/* Full Screen Locked Overlay when Subscription Expired or None */}
       <Modal
         visible={
-          !!subStatus && (subStatus.isExpired || subStatus.status === "none")
+          !checking &&
+          !!subStatus &&
+          (!subStatus.isSubscribed || subStatus.isExpired || subStatus.status === "none")
         }
         animationType="fade"
         transparent={true}
@@ -135,12 +172,12 @@ export default function AppLayout() {
             <Text style={styles.expiredLockTitle}>
               {subStatus?.isExpired
                 ? "Subscription Expired"
-                : "Pro Membership Required"}
+                : "Active Subscription Required"}
             </Text>
             <Text style={styles.expiredLockText}>
               {subStatus?.isExpired
-                ? `Your subscription ended on ${subStatus.endDateStr || "recently"}. App access is currently paused until your plan is renewed.`
-                : "Subscribe for full access to your health dashboard, diet plans, and weight loss tracking."}
+                ? `Your subscription ended on ${subStatus.endDateStr || "recently"}. App access is paused until your plan is renewed.`
+                : "An active subscription is required to access your health dashboard, diet plans, and weight loss tracking."}
             </Text>
 
             <TouchableOpacity
@@ -163,6 +200,16 @@ export default function AppLayout() {
               <Text style={styles.manageUPIText}>
                 How to manage mandate in UPI App?
               </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.lockLogoutBtn}
+              onPress={async () => {
+                await supabase.auth.signOut();
+                router.replace("/(auth)/login");
+              }}
+            >
+              <Text style={styles.lockLogoutText}>Log in with another account</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -274,6 +321,18 @@ const styles = StyleSheet.create({
     color: "#64748B",
     fontSize: 14,
     fontWeight: "500",
+    textDecorationLine: "underline",
+  },
+  lockLogoutBtn: {
+    marginTop: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  lockLogoutText: {
+    color: "#94A3B8",
+    fontSize: 13,
+    fontWeight: "600",
     textDecorationLine: "underline",
   },
 });

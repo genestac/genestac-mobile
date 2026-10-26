@@ -22,10 +22,7 @@ export default function DashboardLayout() {
       setUserId(uid);
       const goal = await fetchUserPrimaryGoal(uid);
       if (isMounted) {
-        setCurrentGoal(goal);
-        if (!goal) {
-          setShowGoalModal(true);
-        }
+        setCurrentGoal(goal || "Weight Loss");
       }
     });
 
@@ -33,15 +30,6 @@ export default function DashboardLayout() {
       isMounted = false;
     };
   }, []);
-
-  // Guard: If user chose a non-weight goal, they should ONLY see their goal page & profile section!
-  useEffect(() => {
-    if (currentGoal && !isWeightLossGoal(currentGoal)) {
-      if (!pathname.includes("/profile")) {
-        router.replace(getRouteForPrimaryGoal(currentGoal) as any);
-      }
-    }
-  }, [currentGoal, pathname]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -71,7 +59,6 @@ export default function DashboardLayout() {
 
         {/* Hidden sub-routes accessible via in-app navigation */}
         <Tabs.Screen name="consultation" options={{ href: null }} />
-        <Tabs.Screen name="shop" options={{ href: null }} />
         <Tabs.Screen name="diet" options={{ href: null }} />
         <Tabs.Screen name="exercise" options={{ href: null }} />
         <Tabs.Screen name="steps" options={{ href: null }} />
@@ -93,20 +80,6 @@ export default function DashboardLayout() {
           if (type === 'weight') {
             router.push('/(app)/dashboard/track?tab=weight' as any);
           }
-        }}
-      />
-
-      {/* Primary Goal Selection Modal */}
-      <PrimaryGoalModal
-        visible={showGoalModal}
-        userId={userId}
-        initialGoal={currentGoal}
-        allowDismiss={false}
-        onClose={() => setShowGoalModal(false)}
-        onGoalSaved={(savedGoal, targetRoute) => {
-          setCurrentGoal(savedGoal);
-          setShowGoalModal(false);
-          router.replace(targetRoute as any);
         }}
       />
     </View>

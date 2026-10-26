@@ -99,9 +99,7 @@ export default function LoginScreen() {
               },
               { onConflict: 'id', ignoreDuplicates: true }
             );
-            const goal = await fetchUserPrimaryGoal(user.id);
-            const destination = getRouteForPrimaryGoal(goal);
-            router.replace(destination as any);
+            router.replace('/(app)/dashboard');
             return;
           }
         }
@@ -134,10 +132,7 @@ export default function LoginScreen() {
     if (error) {
       Alert.alert('Login Failed', error.message);
     } else {
-      const uid = authData?.user?.id;
-      const goal = uid ? await fetchUserPrimaryGoal(uid) : null;
-      const destination = getRouteForPrimaryGoal(goal);
-      router.replace(destination as any);
+      router.replace('/(app)/dashboard');
     }
   };
 

@@ -66,14 +66,107 @@ export async function fetchUserPlans(userId: string): Promise<UserPlan | null> {
       .from('user_plans')
       .select('*')
       .eq('user_id', userId)
-      .maybeSingle();
+      .order('updated_at', { ascending: false, nullsFirst: false });
 
     if (error) {
       console.error('Error fetching user plans from Supabase:', error);
       return null;
     }
 
-    return (data as UserPlan) || null;
+    if (!data || data.length === 0) {
+      return null;
+    }
+
+    if (data.length === 1) {
+      return data[0] as UserPlan;
+    }
+
+    // If multiple rows exist (e.g. from previous duplicate inserts), merge them gracefully
+    const rows = data as UserPlan[];
+    const primary = rows[0];
+
+    // Merge history arrays by date, deduplicating with preference for newest entries
+    const mergeHistoryByDate = <T extends { date?: string }>(getter: (r: UserPlan) => T[] | undefined): T[] => {
+      const map = new Map<string, T>();
+      // Process from oldest row to newest row so newest entries overwrite oldest
+      for (let i = rows.length - 1; i >= 0; i--) {
+        const items = getter(rows[i]);
+        if (Array.isArray(items)) {
+          for (const item of items) {
+            if (item && item.date) {
+              const key = item.date.split('T')[0];
+              map.set(key, item);
+            }
+          }
+        }
+      }
+      return Array.from(map.values()).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    };
+
+    // Find first non-empty value for object/scalar fields
+    const findFirst = <T>(getter: (r: UserPlan) => T | undefined): T | undefined => {
+      for (const r of rows) {
+        const val = getter(r);
+        if (val !== undefined && val !== null) {
+          if (typeof val === 'object' && Object.keys(val as object).length === 0) {
+            continue;
+          }
+          return val;
+        }
+      }
+      return undefined;
+    };
+
+    const mergedSteps = mergeHistoryByDate(r => r.steps_history);
+    const mergedWater = mergeHistoryByDate(r => r.water_history);
+    const mergedSleep = mergeHistoryByDate(r => r.sleep_history);
+    const mergedMeasurements = mergeHistoryByDate(r => r.measurement_history);
+
+    const merged: UserPlan = {
+      ...primary,
+      id: primary.id,
+      user_id: userId,
+      diet_plan: findFirst(r => r.diet_plan) || primary.diet_plan,
+      exercise_plan: findFirst(r => r.exercise_plan) || primary.exercise_plan,
+      health_profile: findFirst(r => r.health_profile) || primary.health_profile,
+      doctor_review: findFirst(r => r.doctor_review) !== undefined ? findFirst(r => r.doctor_review) : primary.doctor_review,
+      steps_history: mergedSteps.length > 0 ? mergedSteps : (primary.steps_history || []),
+      water_history: mergedWater.length > 0 ? mergedWater : (primary.water_history || []),
+      sleep_history: mergedSleep.length > 0 ? mergedSleep : (primary.sleep_history || []),
+      measurement_history: mergedMeasurements.length > 0 ? mergedMeasurements : (primary.measurement_history || []),
+    };
+
+    // Background cleanup: consolidate to primary row and remove extra duplicate rows
+    const duplicateIds = rows.slice(1).map(r => r.id).filter(Boolean) as string[];
+    if (duplicateIds.length > 0 && primary.id) {
+      (async () => {
+        try {
+          await supabase
+            .from('user_plans')
+            .update({
+              diet_plan: merged.diet_plan,
+              exercise_plan: merged.exercise_plan,
+              health_profile: merged.health_profile,
+              doctor_review: merged.doctor_review,
+              steps_history: merged.steps_history,
+              water_history: merged.water_history,
+              sleep_history: merged.sleep_history,
+              measurement_history: merged.measurement_history,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', primary.id);
+
+          await supabase
+            .from('user_plans')
+            .delete()
+            .in('id', duplicateIds);
+        } catch {
+          // Silent cleanup
+        }
+      })();
+    }
+
+    return merged;
   } catch (err) {
     console.error('Failed to fetch user plans from Supabase:', err);
     return null;

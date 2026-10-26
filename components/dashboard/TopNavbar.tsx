@@ -16,18 +16,8 @@ interface TopNavbarProps {
 }
 
 export const TopNavbar: React.FC<TopNavbarProps> = ({ userName }) => {
-  const handleLogoPress = async () => {
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const goal = await fetchUserPrimaryGoal(session.user.id);
-        if (goal && !isWeightLossGoal(goal)) {
-          router.replace(getRouteForPrimaryGoal(goal) as any);
-          return;
-        }
-      }
-    } catch {}
-    router.push("/(app)");
+  const handleLogoPress = () => {
+    router.push("/(app)/dashboard");
   };
 
   return (

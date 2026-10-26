@@ -29,6 +29,7 @@ import { linkReferralOnSignup, validateReferralCode } from '@/lib/api';
 import { sendRegistrationOtpEmail, verifyRegistrationOtp } from '@/lib/email';
 import { TermsModal } from '@/components/TermsModal';
 import { PrivacyPolicyModal } from '@/components/PrivacyPolicyModal';
+import { trackCompleteRegistration } from '@/lib/metaPixel';
 
 // Required for OAuth redirects on Android
 safeWebBrowser.maybeCompleteAuthSession();
@@ -244,6 +245,15 @@ export default function RegisterScreen() {
               { onConflict: 'id', ignoreDuplicates: true }
             );
 
+            // Meta Tracking: Complete Registration for Google OAuth
+            trackCompleteRegistration({
+              userId: user.id,
+              email: user.email,
+              phone: user.phone,
+              name: user.user_metadata?.full_name,
+              method: 'google_oauth',
+            }).catch(() => {});
+
             router.replace('/(app)/dashboard');
             return;
           }
@@ -293,6 +303,15 @@ export default function RegisterScreen() {
     setVerifyingOtp(false);
     setShowOtp(false);
     if (!signInError) {
+      // Meta Tracking: Complete Registration for Email OTP signup
+      trackCompleteRegistration({
+        userId: otpUserId,
+        email: otpEmail,
+        phone,
+        name,
+        method: 'email_otp',
+      }).catch(() => {});
+
       router.replace('/(app)/dashboard');
     } else {
       Alert.alert('Signed up!', 'Account verified. Please log in.');

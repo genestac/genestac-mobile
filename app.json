@@ -34,6 +34,11 @@
         "POST_NOTIFICATIONS"
       ],
       "blockedPermissions": [
+        "com.google.android.gms.permission.AD_ID",
+        "android.permission.ACCESS_ADSERVICES_AD_ID",
+        "android.permission.ACCESS_ADSERVICES_ATTRIBUTION",
+        "android.permission.ACCESS_ADSERVICES_CUSTOM_AUDIENCE",
+        "android.permission.ACCESS_ADSERVICES_TOPICS",
         "android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
@@ -81,7 +86,20 @@
       ],
       "expo-video",
       "expo-sqlite",
-      "expo-audio"
+      "expo-audio",
+      [
+        "react-native-fbsdk-next",
+        {
+          "appID": "1530795702149764",
+          "clientToken": "PASTE_YOUR_FACEBOOK_CLIENT_TOKEN_HERE",
+          "displayName": "Genestac",
+          "scheme": "fb1530795702149764",
+          "advertiserIDCollectionEnabled": false,
+          "autoLogAppEventsEnabled": true,
+          "isAutoInitEnabled": true,
+          "iosUserTrackingPermission": "This identifier will be used to deliver personalized recommendations and ads."
+        }
+      ]
     ],
     "extra": {
       "router": {},

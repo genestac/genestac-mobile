@@ -24,6 +24,7 @@ import {
 } from "@/lib/razorpay";
 import { TermsModal } from "@/components/TermsModal";
 import { PrivacyPolicyModal } from "@/components/PrivacyPolicyModal";
+import { trackInitiateCheckout, trackPurchase } from "@/lib/metaPixel";
 
 interface PricingModalProps {
   visible: boolean;
@@ -157,6 +158,13 @@ export const PricingModal: React.FC<PricingModalProps> = ({
 
       setSubscribing(false);
 
+      // Meta Tracking: Initiate Checkout
+      trackInitiateCheckout({
+        planTitle: plan.title,
+        amount: plan.amountRupees,
+        orderId: order.orderId,
+      }).catch(() => {});
+
       // Open native Razorpay checkout
       const paymentData = await RazorpayCheckout.open(options);
 
@@ -175,6 +183,19 @@ export const PricingModal: React.FC<PricingModalProps> = ({
         userEmail: userInfo.email,
         userPhone: userInfo.phone,
       });
+
+      // Meta Tracking: Purchase (tracks standard Purchase & 'Purchase ₹1' if amount is 1)
+      trackPurchase({
+        planTitle: plan.title,
+        amount: plan.amountRupees,
+        currency: "INR",
+        transactionId: paymentData.razorpay_payment_id || order.orderId,
+        orderId:
+          paymentData.razorpay_order_id ||
+          (paymentData as any).razorpay_subscription_id ||
+          order.orderId,
+      }).catch(() => {});
+
       await AsyncStorage.setItem("@genestac_is_pro", "true");
       setSubscribing(false);
       Alert.alert(

@@ -18,6 +18,7 @@ import { captureRef } from "react-native-view-shot";
 import * as Sharing from "expo-sharing";
 import { router } from "expo-router";
 import { supabase } from "@/lib/supabase";
+import { fetchUserPlans } from "@/lib/api";
 import { Colors, Fonts, Spacing, Radius } from "@/constants/colors";
 import { evaluateUserBadges, getClosestLockedBadge, Badge } from "@/lib/badgeEvaluator";
 
@@ -42,27 +43,23 @@ export default function BadgesScreen() {
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          const [userRes, plansRes] = await Promise.all([
+          const [userRes, planData] = await Promise.all([
             supabase
               .from("users")
               .select("weight_loss_journey")
               .eq("id", session.user.id)
               .maybeSingle(),
-            supabase
-              .from("user_plans")
-              .select("steps_history, water_history, sleep_history, measurement_history, diet_plan, exercise_plan")
-              .eq("user_id", session.user.id)
-              .maybeSingle()
+            fetchUserPlans(session.user.id)
           ]);
 
           const combinedData = {
             ...(userRes.data?.weight_loss_journey || {}),
-            steps_history: plansRes.data?.steps_history || [],
-            water_history: plansRes.data?.water_history || [],
-            sleep_history: plansRes.data?.sleep_history || [],
-            measurement_history: plansRes.data?.measurement_history || [],
-            diet_plan: plansRes.data?.diet_plan || {},
-            exercise_plan: plansRes.data?.exercise_plan || {},
+            steps_history: planData?.steps_history || [],
+            water_history: planData?.water_history || [],
+            sleep_history: planData?.sleep_history || [],
+            measurement_history: planData?.measurement_history || [],
+            diet_plan: planData?.diet_plan || {},
+            exercise_plan: planData?.exercise_plan || {},
           };
 
           const evaluated = evaluateUserBadges(combinedData);

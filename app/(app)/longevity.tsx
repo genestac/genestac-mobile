@@ -2405,42 +2405,6 @@ export default function LongevityScreen() {
                 </TouchableOpacity>
               </View>
             </View>
-
-            {/* Card 3: Buy Products */}
-            <View style={styles.clinicalActionCard}>
-              <View
-                style={[
-                  styles.clinicalIconCircle,
-                  { backgroundColor: "#ECFDF5" },
-                ]}
-              >
-                <Ionicons name="cart" size={24} color="#059669" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.clinicalCardTitle}>Buy Products</Text>
-                <Text style={styles.clinicalCardSub}>
-                  Explore pharmaceutical-grade NMN, NAD+ boosters, resveratrol,
-                  spermidine & cellular longevity supplements.
-                </Text>
-                <TouchableOpacity
-                  style={[
-                    styles.clinicalActionBtn,
-                    { backgroundColor: "#059669" },
-                  ]}
-                  onPress={() =>
-                    Alert.alert(
-                      "Longevity Dispensary",
-                      "Explore pharmaceutical-grade NMN, NAD+ boosters, resveratrol, spermidine & cellular longevity supplements.",
-                      [{ text: "OK" }],
-                    )
-                  }
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.clinicalActionBtnText}>Buy Products</Text>
-                  <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
-                </TouchableOpacity>
-              </View>
-            </View>
           </View>
         )}
 

@@ -10,14 +10,8 @@ export default function IndexPage() {
     const redirect = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        const goal = await fetchUserPrimaryGoal(session.user.id);
-        if (goal) {
-          const targetRoute = getRouteForPrimaryGoal(goal);
-          router.replace(targetRoute as any);
-        } else {
-          // If primary_goal is null, route to (app) where selection modal will appear
-          router.replace('/(app)' as any);
-        }
+        // Direct to Weight Loss dashboard (other verticals in development)
+        router.replace('/(app)/dashboard');
       } else {
         // Show the welcome / onboarding screen for new users
         router.replace('/(onboarding)/welcome');

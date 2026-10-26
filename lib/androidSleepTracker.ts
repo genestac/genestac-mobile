@@ -251,8 +251,8 @@ export async function syncAndroidAutoSleep(
   let finalHours = 7.5;
   let finalSource: AutoSleepSource = 'sensor_auto';
   let sourceLabel = 'Device Nocturnal Sensors';
-  let bedTime = '11:15 PM';
-  let wakeTime = '7:30 AM';
+  let bedTime: string | undefined = undefined;
+  let wakeTime: string | undefined = undefined;
   let deepH = 2.0;
   let lightH = 4.0;
   let remH = 1.5;
@@ -334,6 +334,8 @@ export async function syncAndroidAutoSleep(
     deepSleepHours: deepH,
     lightSleepHours: lightH,
     remSleepHours: remH,
-    message: `Auto-synced ${finalHours}h of sleep (${bedTime} – ${wakeTime}) via ${sourceLabel}.`,
+    message: bedTime && wakeTime
+      ? `Auto-synced ${finalHours}h of sleep (${bedTime} – ${wakeTime}) via ${sourceLabel}.`
+      : `Auto-synced ${finalHours}h of sleep via ${sourceLabel}.`,
   };
 }

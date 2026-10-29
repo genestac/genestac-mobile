@@ -13,7 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '@/lib/supabase';
 import { trackViewDoctorConsultation, trackBookConsultation } from '@/lib/metaPixel';
@@ -41,10 +41,19 @@ const TIME_SLOTS = [
 ];
 
 export default function BookConsultationScreen() {
+  const params = useLocalSearchParams<{ plan?: string; category?: string; concern?: string }>();
   const [issue, setIssue] = useState('');
   const [additionalNotes, setAdditionalNotes] = useState('');
   const [selectedSlot, setSelectedSlot] = useState(TIME_SLOTS[0]);
   const [consultationMode, setConsultationMode] = useState<'video' | 'phone'>('video');
+
+  useEffect(() => {
+    if (params.plan && !issue) {
+      setIssue(`Interested in Treatment Plan: ${params.plan}`);
+    } else if (params.concern && !issue) {
+      setIssue(params.concern);
+    }
+  }, [params.plan, params.concern]);
 
   // User state
   const [userId, setUserId] = useState<string | null>(null);
@@ -180,7 +189,16 @@ export default function BookConsultationScreen() {
       return;
     }
 
-    if (!userId) {
+    let activeUserId = userId;
+    if (!activeUserId) {
+      const { data: sessionData } = await supabase.auth.getSession();
+      activeUserId = sessionData?.session?.user?.id || null;
+      if (activeUserId) {
+        setUserId(activeUserId);
+      }
+    }
+
+    if (!activeUserId) {
       Alert.alert(
         'Authentication Required',
         'Please sign in to book your doctor consultation.',
@@ -208,7 +226,7 @@ export default function BookConsultationScreen() {
               name: patientName.trim() || undefined,
               phone: patientPhone.trim() || undefined,
             })
-            .eq('id', userId);
+            .eq('id', activeUserId);
         } catch (_) {
           // ignore profile update failure
         }
@@ -227,7 +245,7 @@ export default function BookConsultationScreen() {
         .join('\n');
 
       const appointmentPayload: Record<string, any> = {
-        patient_id: userId,
+        patient_id: activeUserId,
         doctor_id: assignedDoctor.id,
         scheduled_at: scheduledAt,
         duration_minutes: 30,
@@ -248,11 +266,22 @@ export default function BookConsultationScreen() {
         },
       };
 
-      const { data, error } = await supabase
+      let insertResult = await supabase
         .from('appointments')
         .insert([appointmentPayload])
         .select()
         .single();
+
+      if (insertResult.error && (insertResult.error.code === '23503' || insertResult.error.message?.includes('foreign key'))) {
+        delete appointmentPayload.doctor_id;
+        insertResult = await supabase
+          .from('appointments')
+          .insert([appointmentPayload])
+          .select()
+          .single();
+      }
+
+      const { data, error } = insertResult;
 
       if (error) {
         console.error('Error inserting into appointments table:', error);

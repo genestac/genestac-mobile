@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import {
   LONGEVITY_SECTIONS,
@@ -35,6 +36,7 @@ interface CategoryCardsProps {
   treatmentIcon?: keyof typeof Ionicons.glyphMap;
   treatmentPlans?: string[];
   structuredSections?: LongevityPlanSection[];
+  scrollEnabled?: boolean;
 }
 
 const DEFAULT_TREATMENT_PLANS: Record<string, string[]> = {
@@ -96,6 +98,7 @@ function getFallbackPlans(categoryTitle: string): string[] {
 
 export const CategoryCards: React.FC<CategoryCardsProps> = ({
   categoryTitle,
+  categoryTagline,
   consultationSubtitle,
   productsSubtitle,
   treatmentPlanSubtitle = "Personalized clinician-designed care protocols, step-by-step guidance & therapy plans tailored for your health goals.",
@@ -105,6 +108,7 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
   treatmentIcon = "medical",
   treatmentPlans,
   structuredSections,
+  scrollEnabled = true,
 }) => {
   const [showModal, setShowModal] = useState(false);
   const [showTreatmentModal, setShowTreatmentModal] = useState(false);
@@ -149,15 +153,14 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
   }, []);
 
   const handleBookConsultationPress = () => {
-    setShowModal(true);
+    router.push({
+      pathname: "/(app)/dashboard/consultation",
+      params: { category: categoryTitle },
+    } as any);
   };
 
   const handleBuyProducts = () => {
-    Alert.alert(
-      "Buy Your Products",
-      `Opening shop for ${categoryTitle} medical-grade products & clinician recommended kits.`,
-      [{ text: "OK" }]
-    );
+    router.push("/(app)/dashboard/shop");
   };
 
   const handleTreatmentPlans = () => {
@@ -167,7 +170,10 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
   const handleSelectPlanForBooking = (planName: string) => {
     setSelectedPlanTitle(planName);
     setShowTreatmentModal(false);
-    setShowModal(true);
+    router.push({
+      pathname: "/(app)/dashboard/consultation",
+      params: { plan: planName, category: categoryTitle },
+    } as any);
   };
 
   const handleSubmitConsultation = async () => {
@@ -229,9 +235,22 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
         appointmentPayload.doctor_id = doctorId;
       }
 
-      const { error } = await supabase
+      let insertResult = await supabase
         .from("appointments")
         .insert([appointmentPayload]);
+
+      if (
+        insertResult.error &&
+        (insertResult.error.code === "23503" ||
+          insertResult.error.message?.includes("foreign key"))
+      ) {
+        delete appointmentPayload.doctor_id;
+        insertResult = await supabase
+          .from("appointments")
+          .insert([appointmentPayload]);
+      }
+
+      const { error } = insertResult;
 
       if (error) {
         console.error("Error inserting into appointments table:", error);
@@ -271,12 +290,19 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
     }
   };
 
+  const Container = scrollEnabled ? ScrollView : View;
+  const containerProps = scrollEnabled
+    ? {
+        style: styles.scrollContainer,
+        contentContainerStyle: styles.contentContainer,
+        showsVerticalScrollIndicator: false,
+      }
+    : {
+        style: styles.embeddedContainer,
+      };
+
   return (
-    <ScrollView
-      style={styles.scrollContainer}
-      contentContainerStyle={styles.contentContainer}
-      showsVerticalScrollIndicator={false}
-    >
+    <Container {...(containerProps as any)}>
       {/* Card 1: Book Your Consultation */}
       <View style={styles.card}>
         <View style={styles.cardHeaderRow}>
@@ -301,6 +327,41 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
         </TouchableOpacity>
       </View>
 
+      {/* Card 2: Buy Your Products / Medical Skincare */}
+      <View style={styles.card}>
+        <View style={styles.cardHeaderRow}>
+          <View style={[styles.iconCircle, { backgroundColor: "#05966915" }]}>
+            <Ionicons name={productsIcon} size={22} color="#059669" />
+          </View>
+          <View style={styles.headerTextWrap}>
+            <Text style={[styles.cardTag, { color: "#059669" }]}>
+              {categoryTitle.toLowerCase().includes("skin")
+                ? "CLINICAL SKINCARE & RECOVERY PACKS"
+                : "CURATED CARE KITS & PRODUCTS"}
+            </Text>
+            <Text style={styles.cardTitle}>
+              {categoryTitle.toLowerCase().includes("skin")
+                ? "Medical Skincare & Products"
+                : "Buy Your Products"}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.cardSubtitle}>{productsSubtitle}</Text>
+
+        <TouchableOpacity
+          style={[styles.primaryBtn, { backgroundColor: "#059669" }]}
+          onPress={handleBuyProducts}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.primaryBtnText}>
+            {categoryTitle.toLowerCase().includes("skin")
+              ? "Browse Medical Skincare"
+              : "Buy Products"}
+          </Text>
+          <Ionicons name="bag-handle" size={15} color="#FFFFFF" />
+        </TouchableOpacity>
+      </View>
 
       {/* Card 3: Treatment Plans */}
       <View style={styles.card}>
@@ -690,7 +751,7 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </Container>
   );
 };
 
@@ -698,6 +759,10 @@ const styles = StyleSheet.create({
   scrollContainer: {
     flex: 1,
     backgroundColor: "#F8FAFC",
+  },
+  embeddedContainer: {
+    width: "100%",
+    gap: 12,
   },
   contentContainer: {
     padding: 14,

@@ -15,8 +15,9 @@ import { router, useFocusEffect } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { Colors } from "@/constants/colors";
 import { PricingModal } from "@/components/PricingModal";
+import { PrimaryGoalModal } from "@/components/PrimaryGoalModal";
 import { NotificationSettingsCard } from "@/components/NotificationSettingsCard";
-import { getRouteForPrimaryGoal } from "@/lib/primaryGoal";
+import { getRouteForPrimaryGoal, getPrimaryGoalInfo } from "@/lib/primaryGoal";
 
 export default function ProfileScreen() {
   const [user, setUser] = useState<any>(null);
@@ -31,6 +32,7 @@ export default function ProfileScreen() {
   // Primary Goal State
   const [primaryGoal, setPrimaryGoal] = useState<string | null>(null);
   const [showGoalModal, setShowGoalModal] = useState(false);
+  const goalInfo = getPrimaryGoalInfo(primaryGoal);
 
   // Pro Subscription modal
   const [showPricingModal, setShowPricingModal] = useState(false);
@@ -257,23 +259,6 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </TouchableOpacity>
 
-          {/* Health Reports */}
-          <TouchableOpacity
-            style={styles.menuRow}
-            onPress={() => router.push("/(app)/dashboard/track")}
-            activeOpacity={0.7}
-          >
-            <View style={styles.menuIconBg}>
-              <Ionicons
-                name="document-text-outline"
-                size={20}
-                color="#0A8554"
-              />
-            </View>
-            <Text style={styles.menuTitleText}>Health Reports</Text>
-            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
-          </TouchableOpacity>
-
           {/* Book Consultation */}
           <TouchableOpacity
             style={styles.menuRow}
@@ -286,6 +271,7 @@ export default function ProfileScreen() {
             <Text style={styles.menuTitleText}>Book Consultation</Text>
             <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
           </TouchableOpacity>
+
 
 
           {/* Subscription / Pro Plans */}
@@ -307,7 +293,41 @@ export default function ProfileScreen() {
             )}
           </TouchableOpacity>
 
-          {/* Settings & Primary Goal hidden for now — will be re-enabled after other verticals are completed */}
+          {/* Primary Goal */}
+          <TouchableOpacity
+            style={styles.menuRow}
+            onPress={() => setShowGoalModal(true)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.menuIconBg}>
+              <Ionicons name="flag-outline" size={20} color="#0A8554" />
+            </View>
+            <View style={styles.menuTitleWrap}>
+              <Text style={styles.menuRowTitle}>Primary Goal</Text>
+              {primaryGoal ? (
+                <View
+                  style={[
+                    styles.goalBadge,
+                    goalInfo && {
+                      backgroundColor: goalInfo.bgColor,
+                      borderColor: goalInfo.borderColor,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.goalBadgeText,
+                      goalInfo && { color: goalInfo.color },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {primaryGoal}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </TouchableOpacity>
 
           {/* Help & Support */}
           <TouchableOpacity
@@ -366,6 +386,21 @@ export default function ProfileScreen() {
         visible={showPricingModal}
         onClose={() => setShowPricingModal(false)}
         onSubscribeSuccess={() => setIsProUser(true)}
+      />
+
+      {/* Primary Goal Modal */}
+      <PrimaryGoalModal
+        visible={showGoalModal}
+        userId={user?.id ?? ""}
+        initialGoal={primaryGoal}
+        allowDismiss={true}
+        onClose={() => setShowGoalModal(false)}
+        onGoalSaved={(savedGoal, targetRoute) => {
+          setPrimaryGoal(savedGoal);
+          setShowGoalModal(false);
+          const route = targetRoute || getRouteForPrimaryGoal(savedGoal);
+          router.replace(route as any);
+        }}
       />
     </SafeAreaView>
   );
@@ -586,6 +621,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  menuTitleWrap: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  menuRowTitle: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#0F172A",
+  },
   menuTitleText: {
     flex: 1,
     fontSize: 15,
@@ -604,14 +648,17 @@ const styles = StyleSheet.create({
     color: "#d97706",
   },
   goalBadge: {
+    alignSelf: "flex-start",
     backgroundColor: "#ECFDF5",
+    borderWidth: 1,
+    borderColor: "#A7F3D0",
     paddingHorizontal: 8,
     paddingVertical: 3,
-    borderRadius: 8,
-    marginRight: 4,
+    borderRadius: 6,
+    marginTop: 4,
   },
   goalBadgeText: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: "700",
     color: "#0A8554",
   },

@@ -149,17 +149,27 @@ export const BloodGlucoseTrackerCard: React.FC<BloodGlucoseTrackerCardProps> = (
         >
           <Ionicons
             name="sunny-outline"
-            size={13}
+            size={14}
             color={selectedContext === "fasting" ? "#FFFFFF" : "#475569"}
           />
-          <Text
-            style={[
-              styles.contextPillText,
-              selectedContext === "fasting" && styles.contextPillTextActive,
-            ]}
-          >
-            Fasting (70–99 mg/dL)
-          </Text>
+          <View style={styles.contextPillTextContainer}>
+            <Text
+              style={[
+                styles.contextPillText,
+                selectedContext === "fasting" && styles.contextPillTextActive,
+              ]}
+            >
+              Fasting
+            </Text>
+            <Text
+              style={[
+                styles.contextPillSubText,
+                selectedContext === "fasting" && styles.contextPillSubTextActive,
+              ]}
+            >
+              (70–99 mg/dL)
+            </Text>
+          </View>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -173,17 +183,27 @@ export const BloodGlucoseTrackerCard: React.FC<BloodGlucoseTrackerCardProps> = (
         >
           <Ionicons
             name="restaurant-outline"
-            size={13}
+            size={14}
             color={selectedContext === "post_prandial" ? "#FFFFFF" : "#475569"}
           />
-          <Text
-            style={[
-              styles.contextPillText,
-              selectedContext === "post_prandial" && styles.contextPillTextActive,
-            ]}
-          >
-            Post-Prandial (2h after meal)
-          </Text>
+          <View style={styles.contextPillTextContainer}>
+            <Text
+              style={[
+                styles.contextPillText,
+                selectedContext === "post_prandial" && styles.contextPillTextActive,
+              ]}
+            >
+              Post-Prandial
+            </Text>
+            <Text
+              style={[
+                styles.contextPillSubText,
+                selectedContext === "post_prandial" && styles.contextPillSubTextActive,
+              ]}
+            >
+              (2h after meal)
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -643,9 +663,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingVertical: 7,
+    paddingVertical: 8,
     paddingHorizontal: 8,
-    borderRadius: 9,
+    borderRadius: 10,
     backgroundColor: "#F1F5F9",
     borderWidth: 1,
     borderColor: "#E2E8F0",
@@ -658,13 +678,28 @@ const styles = StyleSheet.create({
     backgroundColor: "#0F172A",
     borderColor: "#0F172A",
   },
+  contextPillTextContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
   contextPillText: {
     fontSize: 11,
     fontWeight: "700",
     color: "#475569",
+    textAlign: "center",
   },
   contextPillTextActive: {
     color: "#FFFFFF",
+  },
+  contextPillSubText: {
+    fontSize: 9.5,
+    fontWeight: "600",
+    color: "#64748B",
+    marginTop: 1,
+    textAlign: "center",
+  },
+  contextPillSubTextActive: {
+    color: "#CBD5E1",
   },
   heroZoneCard: {
     borderRadius: 12,

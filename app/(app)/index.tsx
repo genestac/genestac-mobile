@@ -203,11 +203,6 @@ export default function CategoryHubScreen() {
     { id: "task-meal",   title: "Log Today's Meal",   subtitle: "Track your breakfast, lunch & dinner", icon: "nutrition-outline", completed: false, category: "Diet" },
   ]);
 
-  // ── Redirect to Weight Loss Dashboard ─────────────────────────
-  useEffect(() => {
-    router.replace("/(app)/dashboard");
-  }, []);
-
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session?.user) return;
@@ -230,8 +225,16 @@ export default function CategoryHubScreen() {
         .eq("id", uid)
         .maybeSingle();
 
-      const userGoal = userData?.primary_goal || "Weight Loss";
+      const userGoal = userData?.primary_goal || null;
       setPrimaryGoal(userGoal);
+      if (userGoal && !isWeightLossGoal(userGoal)) {
+        router.replace(getRouteForPrimaryGoal(userGoal) as any);
+        return;
+      }
+      if (!userGoal) {
+        // If primary goal is null, show selection modal
+        setShowPrimaryGoalModal(true);
+      }
 
       const today = todayDateStr();
 
@@ -620,16 +623,7 @@ export default function CategoryHubScreen() {
                     styles.categoryCard,
                     { borderColor: cat.borderColor },
                   ]}
-                  onPress={() => {
-                    if (cat.id === "weight-management") {
-                      router.push("/(app)/dashboard");
-                    } else {
-                      Alert.alert(
-                        "Coming Soon",
-                        `${cat.title} protocol is currently under clinical development and will be available in an upcoming update.`
-                      );
-                    }
-                  }}
+                  onPress={() => router.push(cat.route as any)}
                   activeOpacity={0.85}
                 >
                   <View style={styles.cardHeaderRow}>
@@ -766,6 +760,20 @@ export default function CategoryHubScreen() {
       <DocumentUploadModal
         visible={showDocumentUploadModal}
         onClose={() => setShowDocumentUploadModal(false)}
+      />
+
+      {/* Primary Goal Selection Modal */}
+      <PrimaryGoalModal
+        visible={showPrimaryGoalModal}
+        userId={userId || ""}
+        initialGoal={primaryGoal}
+        allowDismiss={false}
+        onClose={() => setShowPrimaryGoalModal(false)}
+        onGoalSaved={(savedGoal, targetRoute) => {
+          setPrimaryGoal(savedGoal);
+          setShowPrimaryGoalModal(false);
+          router.push(targetRoute as any);
+        }}
       />
     </View>
   );

@@ -544,6 +544,7 @@ export default function HeartDiabetesScreen() {
               consultationIcon="pulse"
               productsIcon="cart"
               treatmentPlans={HEART_DIABETES_PLANS}
+              scrollEnabled={false}
             />
           </View>
         )}

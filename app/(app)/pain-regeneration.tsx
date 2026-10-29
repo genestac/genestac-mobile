@@ -318,6 +318,7 @@ export default function PainRegenerationScreen() {
           consultationIcon="medkit"
           productsIcon="cart"
           treatmentPlans={PAIN_REGENERATION_PLANS}
+          scrollEnabled={false}
         />
       </ScrollView>
 

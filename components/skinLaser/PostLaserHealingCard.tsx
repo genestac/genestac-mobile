@@ -1,7 +1,7 @@
 // components/skinLaser/PostLaserHealingCard.tsx
 // Post-Laser Healing & Recovery Tracker: 7-Day Timeline & Clinical Do's & Don'ts Checklist
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   View,
   Text,
@@ -13,15 +13,26 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  LayoutAnimation,
+  UIManager,
 } from "react-native";
+
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import {
   LaserSession,
   ChecklistItem,
-  HEALING_TIMELINE_DAYS,
   HealingDayInfo,
   LaserTreatmentType,
+  LaserProtocolMeta,
+  getHealingTimelineForLaser,
+  getLaserProtocolMeta,
 } from "@/lib/skinLaser";
 
 interface PostLaserHealingCardProps {
@@ -29,7 +40,11 @@ interface PostLaserHealingCardProps {
   checklists: ChecklistItem[];
   onUpdateSession: (updated: Partial<LaserSession>) => void;
   onToggleChecklist: (id: string) => void;
-  onResetSession: (laserType: LaserTreatmentType, sessionDate: string) => void;
+  onResetSession: (
+    laserType: LaserTreatmentType,
+    sessionDate?: string,
+    notes?: string,
+  ) => void;
 }
 
 const AVAILABLE_LASER_TYPES: LaserTreatmentType[] = [
@@ -50,34 +65,90 @@ export const PostLaserHealingCard: React.FC<PostLaserHealingCardProps> = ({
 }) => {
   const insets = useSafeAreaInsets();
   const [selectedDayNumber, setSelectedDayNumber] = useState<number>(
-    session.currentDay || 3
+    session.currentDay || 1,
   );
   const [checklistTab, setChecklistTab] = useState<"do" | "dont">("do");
-  const [showNewSessionModal, setShowNewSessionModal] = useState<boolean>(false);
-  const [selectedLaserType, setSelectedLaserType] = useState<LaserTreatmentType>(
-    session.laserType || "CO2 Fractional Resurfacing"
-  );
-  const [treatmentNotes, setTreatmentNotes] = useState<string>(session.notes || "");
+  const [showNewSessionModal, setShowNewSessionModal] =
+    useState<boolean>(false);
+  const [selectedLaserType, setSelectedLaserType] =
+    useState<LaserTreatmentType>(
+      session.laserType || "CO2 Fractional Resurfacing",
+    );
+  const [isProtocolDropdownOpen, setIsProtocolDropdownOpen] =
+    useState<boolean>(false);
 
-  // Find info for selected day
+  // Dynamic protocol timelines & metadata
+  const timelineDays = getHealingTimelineForLaser(session.laserType);
+  const protocolMeta = getLaserProtocolMeta(session.laserType);
+  const selectedProtocolMeta = getLaserProtocolMeta(selectedLaserType);
+
+  // Protocols to display: Show 2 by default, or all when dropdown is open.
+  // When collapsed, always ensure the currently selected protocol is visible in the top 2.
+  const displayedProtocols = useMemo(() => {
+    if (isProtocolDropdownOpen) {
+      return AVAILABLE_LASER_TYPES;
+    }
+    const isSelectedInTopTwo =
+      AVAILABLE_LASER_TYPES.indexOf(selectedLaserType) < 2;
+    if (isSelectedInTopTwo) {
+      return AVAILABLE_LASER_TYPES.slice(0, 2);
+    }
+    return [
+      selectedLaserType,
+      AVAILABLE_LASER_TYPES[0],
+    ];
+  }, [isProtocolDropdownOpen, selectedLaserType]);
+
+  const [treatmentNotes, setTreatmentNotes] = useState<string>(
+    session.notes || protocolMeta.defaultNote,
+  );
+
+  // Find info for selected day from current session's timeline
   const currentDayInfo: HealingDayInfo =
-    HEALING_TIMELINE_DAYS.find((d) => d.day === selectedDayNumber) ||
-    HEALING_TIMELINE_DAYS[2];
+    timelineDays.find((d) => d.day === selectedDayNumber) || timelineDays[0];
 
   const filteredChecklists = checklists.filter((c) => c.type === checklistTab);
-  const doCount = checklists.filter((c) => c.type === "do" && c.completed).length;
+  const doCount = checklists.filter(
+    (c) => c.type === "do" && c.completed,
+  ).length;
   const doTotal = checklists.filter((c) => c.type === "do").length;
-  const dontCount = checklists.filter((c) => c.type === "dont" && c.completed).length;
+  const dontCount = checklists.filter(
+    (c) => c.type === "dont" && c.completed,
+  ).length;
   const dontTotal = checklists.filter((c) => c.type === "dont").length;
 
+  // Sync state whenever session prop changes
+  useEffect(() => {
+    if (session.laserType) {
+      setSelectedLaserType(session.laserType);
+    }
+    if (session.currentDay) {
+      setSelectedDayNumber(session.currentDay);
+    }
+    if (session.notes) {
+      setTreatmentNotes(session.notes);
+    }
+  }, [session.laserType, session.currentDay, session.notes]);
+
+  const handleOpenNewSessionModal = () => {
+    setSelectedLaserType(session.laserType || "CO2 Fractional Resurfacing");
+    const currentMeta = getLaserProtocolMeta(session.laserType);
+    setTreatmentNotes(session.notes || currentMeta.defaultNote);
+    setIsProtocolDropdownOpen(false);
+    setShowNewSessionModal(true);
+  };
+
   const handleStartSession = () => {
-    onResetSession(selectedLaserType, new Date().toISOString());
-    onUpdateSession({ notes: treatmentNotes, currentDay: 1 });
+    const newNotes = treatmentNotes.trim() || selectedProtocolMeta.defaultNote;
+    // Single atomic call to switch protocol, reset timeline to day 1, and load tailored checklist
+    onResetSession(selectedLaserType, new Date().toISOString(), newNotes);
     setSelectedDayNumber(1);
+    setIsProtocolDropdownOpen(false);
     setShowNewSessionModal(false);
+    const newTimeline = getHealingTimelineForLaser(selectedLaserType);
     Alert.alert(
-      "Laser Session Initiated",
-      `Active protocol started for ${selectedLaserType}. Day 1 cooling protocol is now active.`
+      "Laser Protocol Initiated",
+      `Active protocol started for ${selectedLaserType}. Day 1 (${newTimeline[0]?.shortLabel || "Care"}) protocol is now active.`,
     );
   };
 
@@ -86,11 +157,26 @@ export const PostLaserHealingCard: React.FC<PostLaserHealingCardProps> = ({
       {/* ── CARD HEADER ── */}
       <View style={styles.headerRow}>
         <View style={styles.badgeRow}>
-          <View style={styles.iconCircle}>
-            <Ionicons name="sparkles" size={17} color="#E11D48" />
+          <View
+            style={[
+              styles.iconCircle,
+              { backgroundColor: protocolMeta.bgTint },
+            ]}
+          >
+            <Ionicons
+              name="sparkles"
+              size={17}
+              color={protocolMeta.themeColor}
+            />
           </View>
           <View style={styles.titleWrap}>
-            <Text style={styles.cardSuperTitle} numberOfLines={1}>
+            <Text
+              style={[
+                styles.cardSuperTitle,
+                { color: protocolMeta.themeColor },
+              ]}
+              numberOfLines={1}
+            >
               AESTHETIC DERMATOLOGY
             </Text>
             <Text style={styles.cardTitle} numberOfLines={1}>
@@ -104,7 +190,7 @@ export const PostLaserHealingCard: React.FC<PostLaserHealingCardProps> = ({
       <View style={styles.actionButtonRow}>
         <TouchableOpacity
           style={styles.newSessionBtn}
-          onPress={() => setShowNewSessionModal(true)}
+          onPress={handleOpenNewSessionModal}
           activeOpacity={0.8}
         >
           <Ionicons name="refresh" size={13} color="#E11D48" />
@@ -115,15 +201,23 @@ export const PostLaserHealingCard: React.FC<PostLaserHealingCardProps> = ({
       {/* ── ACTIVE SESSION BANNER ── */}
       <View style={styles.sessionBanner}>
         <View style={styles.sessionBannerLeft}>
-          <View style={styles.pulseDot} />
+          <View
+            style={[
+              styles.pulseDot,
+              { backgroundColor: protocolMeta.themeColor },
+            ]}
+          />
           <View>
             <Text style={styles.sessionTypeLabel}>{session.laserType}</Text>
-            <Text style={styles.sessionSub}>
-              Day {session.currentDay} of 7 Post-Treatment
-            </Text>
+            
           </View>
         </View>
-        <View style={styles.dayBadge}>
+        <View
+          style={[
+            styles.dayBadge,
+            { backgroundColor: protocolMeta.themeColor },
+          ]}
+        >
           <Text style={styles.dayBadgeText}>DAY {session.currentDay}</Text>
         </View>
       </View>
@@ -135,7 +229,7 @@ export const PostLaserHealingCard: React.FC<PostLaserHealingCardProps> = ({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.timelineScroller}
       >
-        {HEALING_TIMELINE_DAYS.map((dayItem) => {
+        {timelineDays.map((dayItem) => {
           const isSelected = selectedDayNumber === dayItem.day;
           const isPast = dayItem.day < session.currentDay;
           const isCurrent = dayItem.day === session.currentDay;
@@ -163,7 +257,7 @@ export const PostLaserHealingCard: React.FC<PostLaserHealingCardProps> = ({
                 <Ionicons
                   name={dayItem.icon as any}
                   size={14}
-                  color={isSelected ? dayItem.themeColor : dayItem.themeColor}
+                  color={dayItem.themeColor}
                 />
               </View>
               <Text
@@ -181,18 +275,12 @@ export const PostLaserHealingCard: React.FC<PostLaserHealingCardProps> = ({
                   isSelected && styles.dayPillStageTextSelected,
                 ]}
               >
-                {dayItem.day === 1
-                  ? "Redness"
-                  : dayItem.day === 3
-                  ? "Peeling"
-                  : dayItem.day === 7
-                  ? "Glowing"
-                  : dayItem.stageName.split(":")[1]?.trim() || `Stage ${dayItem.day}`}
+                {dayItem.shortLabel ||
+                  dayItem.stageName.split(":")[1]?.trim() ||
+                  `Day ${dayItem.day}`}
               </Text>
 
-              {isCurrent && (
-                <View style={styles.activePillDot} />
-              )}
+              {isCurrent && <View style={styles.activePillDot} />}
             </TouchableOpacity>
           );
         })}
@@ -202,7 +290,10 @@ export const PostLaserHealingCard: React.FC<PostLaserHealingCardProps> = ({
       <View
         style={[
           styles.stageDetailCard,
-          { backgroundColor: currentDayInfo.bgTint, borderColor: currentDayInfo.themeColor + "35" },
+          {
+            backgroundColor: currentDayInfo.bgTint,
+            borderColor: currentDayInfo.themeColor + "35",
+          },
         ]}
       >
         <View style={styles.stageDetailHeader}>
@@ -213,19 +304,32 @@ export const PostLaserHealingCard: React.FC<PostLaserHealingCardProps> = ({
                 { backgroundColor: currentDayInfo.themeColor },
               ]}
             >
-              <Text style={styles.stageNumberText}>DAY {currentDayInfo.day}</Text>
+              <Text style={styles.stageNumberText}>
+                DAY {currentDayInfo.day}
+              </Text>
             </View>
-            <Text style={[styles.stageHeading, { color: currentDayInfo.themeColor }]}>
+            <Text
+              style={[
+                styles.stageHeading,
+                { color: currentDayInfo.themeColor },
+              ]}
+            >
               {currentDayInfo.headline}
             </Text>
           </View>
         </View>
 
         {/* Expected Symptoms */}
-        <Text style={styles.bulletCategoryTitle}>Expected Skin Sensations:</Text>
+        <Text style={styles.bulletCategoryTitle}>
+          Expected Skin Sensations:
+        </Text>
         {currentDayInfo.expectedSymptoms.map((symptom, idx) => (
           <View key={`sym-${idx}`} style={styles.bulletRow}>
-            <Ionicons name="alert-circle-outline" size={14} color={currentDayInfo.themeColor} />
+            <Ionicons
+              name="alert-circle-outline"
+              size={14}
+              color={currentDayInfo.themeColor}
+            />
             <Text style={styles.bulletText}>{symptom}</Text>
           </View>
         ))}
@@ -240,48 +344,6 @@ export const PostLaserHealingCard: React.FC<PostLaserHealingCardProps> = ({
             <Text style={styles.bulletText}>{instruction}</Text>
           </View>
         ))}
-
-        {/* Comfort Stepper */}
-        <View style={styles.comfortRow}>
-          <View style={styles.comfortLabelWrap}>
-            <Text
-              style={styles.comfortLabel}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.85}
-            >
-              Comfort Level:{" "}
-              <Text style={{ fontWeight: "800", color: "#0F172A" }}>
-                {session.comfortLevel}/10
-              </Text>{" "}
-              ({session.comfortLevel <= 3
-                ? "Mild Heat"
-                : session.comfortLevel <= 6
-                ? "Moderate Tingling"
-                : "High Sensitivity"})
-            </Text>
-          </View>
-          <View style={styles.stepperWrap}>
-            <TouchableOpacity
-              style={styles.stepBtn}
-              onPress={() =>
-                onUpdateSession({ comfortLevel: Math.max(1, session.comfortLevel - 1) })
-              }
-              activeOpacity={0.7}
-            >
-              <Ionicons name="remove" size={14} color="#334155" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.stepBtn}
-              onPress={() =>
-                onUpdateSession({ comfortLevel: Math.min(10, session.comfortLevel + 1) })
-              }
-              activeOpacity={0.7}
-            >
-              <Ionicons name="add" size={14} color="#334155" />
-            </TouchableOpacity>
-          </View>
-        </View>
       </View>
 
       {/* ── DO'S & DON'TS CLINICAL CHECKLIST ── */}
@@ -377,7 +439,9 @@ export const PostLaserHealingCard: React.FC<PostLaserHealingCardProps> = ({
                     {item.title}
                   </Text>
                   <View style={styles.categoryBadge}>
-                    <Text style={styles.categoryBadgeText}>{item.category}</Text>
+                    <Text style={styles.categoryBadgeText}>
+                      {item.category}
+                    </Text>
                   </View>
                 </View>
                 <Text style={styles.checkItemDesc}>{item.desc}</Text>
@@ -401,7 +465,10 @@ export const PostLaserHealingCard: React.FC<PostLaserHealingCardProps> = ({
           <TouchableOpacity
             style={styles.modalBackdrop}
             activeOpacity={1}
-            onPress={() => setShowNewSessionModal(false)}
+            onPress={() => {
+              setShowNewSessionModal(false);
+              setIsProtocolDropdownOpen(false);
+            }}
           />
           <View
             style={[
@@ -412,10 +479,26 @@ export const PostLaserHealingCard: React.FC<PostLaserHealingCardProps> = ({
             <View style={styles.modalHeader}>
               <View style={styles.modalTitleRow}>
                 <Ionicons name="sparkles" size={18} color="#E11D48" />
-                <Text style={styles.modalTitle}>Start New Laser Session</Text>
+                <View>
+                  <Text style={styles.modalTitle}>Select Laser Protocol</Text>
+                  <Text style={styles.modalSubHeader}>
+                    Currently Active:{" "}
+                    <Text
+                      style={{
+                        fontWeight: "800",
+                        color: protocolMeta.themeColor,
+                      }}
+                    >
+                      {session.laserType}
+                    </Text>
+                  </Text>
+                </View>
               </View>
               <TouchableOpacity
-                onPress={() => setShowNewSessionModal(false)}
+                onPress={() => {
+                  setShowNewSessionModal(false);
+                  setIsProtocolDropdownOpen(false);
+                }}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Ionicons name="close" size={20} color="#64748B" />
@@ -423,68 +506,216 @@ export const PostLaserHealingCard: React.FC<PostLaserHealingCardProps> = ({
             </View>
 
             <ScrollView
-              style={{ maxHeight: 240 }}
+              style={{ maxHeight: 420 }}
               showsVerticalScrollIndicator={false}
               bounces={false}
             >
-              <Text style={styles.modalFieldLabel}>Select Laser Treatment Type</Text>
-              {AVAILABLE_LASER_TYPES.map((type) => {
+              <View style={styles.protocolSectionHeader}>
+                <Text style={styles.modalFieldLabel}>
+                  Select Clinical Treatment Protocol
+                </Text>
+                <Text style={styles.protocolCountTag}>
+                  {isProtocolDropdownOpen
+                    ? `All (${AVAILABLE_LASER_TYPES.length})`
+                    : `Showing 2 of ${AVAILABLE_LASER_TYPES.length}`}
+                </Text>
+              </View>
+
+              {displayedProtocols.map((type) => {
                 const isSelected = selectedLaserType === type;
+                const meta = getLaserProtocolMeta(type);
                 return (
                   <TouchableOpacity
                     key={type}
                     style={[
                       styles.typeSelectorRow,
-                      isSelected && styles.typeSelectorRowSelected,
+                      isSelected && {
+                        backgroundColor: meta.bgTint,
+                        borderColor: meta.themeColor,
+                      },
                     ]}
-                    onPress={() => setSelectedLaserType(type)}
+                    onPress={() => {
+                      setSelectedLaserType(type);
+                      setTreatmentNotes(meta.defaultNote);
+                      if (isProtocolDropdownOpen) {
+                        try {
+                          LayoutAnimation.configureNext(
+                            LayoutAnimation.Presets.easeInEaseOut,
+                          );
+                        } catch (e) {}
+                        setIsProtocolDropdownOpen(false);
+                      }
+                    }}
                     activeOpacity={0.7}
                   >
                     <Ionicons
                       name={isSelected ? "radio-button-on" : "radio-button-off"}
-                      size={16}
-                      color={isSelected ? "#E11D48" : "#94A3B8"}
+                      size={18}
+                      color={isSelected ? meta.themeColor : "#94A3B8"}
                     />
-                    <Text
-                      style={[
-                        styles.typeSelectorText,
-                        isSelected && styles.typeSelectorTextSelected,
-                      ]}
-                    >
-                      {type}
-                    </Text>
+                    <View style={{ flex: 1, marginLeft: 8 }}>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.typeSelectorText,
+                            isSelected && {
+                              color: meta.themeColor,
+                              fontWeight: "800",
+                            },
+                          ]}
+                        >
+                          {type}
+                        </Text>
+                        <View
+                          style={[
+                            styles.modalDowntimeTag,
+                            {
+                              backgroundColor: isSelected
+                                ? meta.themeColor + "18"
+                                : "#F1F5F9",
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.modalDowntimeText,
+                              {
+                                color: isSelected ? meta.themeColor : "#64748B",
+                              },
+                            ]}
+                          >
+                            {meta.downtime.split(" ")[0]}{" "}
+                            {meta.downtime.split(" ")[1]}
+                          </Text>
+                        </View>
+                      </View>
+                      <Text
+                        style={styles.typeSelectorSubtitle}
+                        numberOfLines={1}
+                      >
+                        {meta.indication}
+                      </Text>
+                    </View>
                   </TouchableOpacity>
                 );
               })}
 
-              <Text style={[styles.modalFieldLabel, { marginTop: 12 }]}>
-                Clinical Treatment Notes (Optional)
+              {/* DROPDOWN EXPAND/COLLAPSE TOGGLE */}
+              <TouchableOpacity
+                style={[
+                  styles.dropdownToggleBtn,
+                  isProtocolDropdownOpen && styles.dropdownToggleBtnOpen,
+                ]}
+                onPress={() => {
+                  try {
+                    LayoutAnimation.configureNext(
+                      LayoutAnimation.Presets.easeInEaseOut,
+                    );
+                  } catch (e) {}
+                  setIsProtocolDropdownOpen((prev) => !prev);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.dropdownToggleText,
+                    isProtocolDropdownOpen && { color: "#64748B" },
+                  ]}
+                >
+                  {isProtocolDropdownOpen
+                    ? "Show less protocols"
+                    : `Click to see more (${AVAILABLE_LASER_TYPES.length - 2} more protocols)`}
+                </Text>
+                <Ionicons
+                  name={isProtocolDropdownOpen ? "chevron-up" : "chevron-down"}
+                  size={14}
+                  color={isProtocolDropdownOpen ? "#64748B" : "#0284C7"}
+                />
+              </TouchableOpacity>
+
+              {/* Protocol Highlights Preview Card */}
+              {selectedProtocolMeta && (
+                <View
+                  style={[
+                    styles.protocolPreviewCard,
+                    {
+                      backgroundColor: selectedProtocolMeta.bgTint,
+                      borderColor: selectedProtocolMeta.themeColor + "35",
+                    },
+                  ]}
+                >
+                  <View style={styles.protocolPreviewHeader}>
+                    <Ionicons
+                      name="shield-checkmark"
+                      size={14}
+                      color={selectedProtocolMeta.themeColor}
+                    />
+                    <Text
+                      style={[
+                        styles.protocolPreviewTitle,
+                        { color: selectedProtocolMeta.themeColor },
+                      ]}
+                    >
+                      {selectedProtocolMeta.type} Protocol
+                    </Text>
+                  </View>
+                  <Text style={styles.protocolPreviewFocus}>
+                    <Text style={{ fontWeight: "700" }}>Core Care Focus: </Text>
+                    {selectedProtocolMeta.primaryFocus}
+                  </Text>
+                  <Text style={styles.protocolPreviewDowntime}>
+                    <Text style={{ fontWeight: "700" }}>
+                      Expected Downtime:{" "}
+                    </Text>
+                    {selectedProtocolMeta.downtime}
+                  </Text>
+                </View>
+              )}
+
+              <Text style={[styles.modalFieldLabel, { marginTop: 14 }]}>
+                Clinical Treatment Notes
               </Text>
               <TextInput
                 style={styles.modalInput}
-                placeholder="e.g. Full face resurfacing for acne scars & fine lines"
+                placeholder="e.g. Protocol session notes and specific target areas"
                 placeholderTextColor="#94A3B8"
                 value={treatmentNotes}
                 onChangeText={setTreatmentNotes}
+                multiline
+                numberOfLines={2}
               />
             </ScrollView>
 
             <View style={styles.modalActionsRow}>
               <TouchableOpacity
                 style={styles.cancelBtn}
-                onPress={() => setShowNewSessionModal(false)}
+                onPress={() => {
+                  setShowNewSessionModal(false);
+                  setIsProtocolDropdownOpen(false);
+                }}
                 activeOpacity={0.7}
               >
                 <Text style={styles.cancelBtnText}>Cancel</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.confirmBtn}
+                style={[
+                  styles.confirmBtn,
+                  { backgroundColor: selectedProtocolMeta.themeColor },
+                ]}
                 onPress={handleStartSession}
                 activeOpacity={0.8}
               >
                 <Ionicons name="flash" size={15} color="#FFFFFF" />
-                <Text style={styles.confirmBtnText}>Start Protocol</Text>
+                <Text style={styles.confirmBtnText}>
+                  Activate
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -720,42 +951,6 @@ const styles = StyleSheet.create({
     flex: 1,
     lineHeight: 16,
   },
-  comfortRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "rgba(255,255,255,0.85)",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    marginTop: 12,
-    marginHorizontal: -8,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-  },
-  comfortLabelWrap: {
-    flex: 1,
-    marginRight: 8,
-  },
-  comfortLabel: {
-    fontSize: 11.5,
-    color: "#334155",
-  },
-  stepperWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  stepBtn: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: "#F1F5F9",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#CBD5E1",
-  },
   checklistSection: {
     marginTop: 4,
   },
@@ -869,6 +1064,63 @@ const styles = StyleSheet.create({
     color: "#64748B",
     lineHeight: 15,
   },
+  protocolBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  protocolBadgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  modalDowntimeTag: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  modalDowntimeText: {
+    fontSize: 9.5,
+    fontWeight: "700",
+  },
+  typeSelectorSubtitle: {
+    fontSize: 10.5,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  protocolPreviewCard: {
+    borderRadius: 10,
+    padding: 12,
+    borderWidth: 1,
+    marginTop: 6,
+    marginBottom: 8,
+  },
+  protocolPreviewHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 4,
+  },
+  protocolPreviewTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  protocolPreviewFocus: {
+    fontSize: 11,
+    color: "#334155",
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  protocolPreviewDowntime: {
+    fontSize: 11,
+    color: "#334155",
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  switchLinkText: {
+    fontSize: 9.5,
+    fontWeight: "700",
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(15, 23, 42, 0.6)",
@@ -900,6 +1152,49 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
     color: "#0F172A",
+  },
+  modalSubHeader: {
+    fontSize: 11,
+    color: "#64748B",
+    marginTop: 2,
+  },
+  protocolSectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  protocolCountTag: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#64748B",
+    backgroundColor: "#F1F5F9",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  dropdownToggleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#F0F9FF",
+    borderWidth: 1,
+    borderColor: "#BAE6FD",
+    borderRadius: 8,
+    marginTop: 2,
+    marginBottom: 10,
+  },
+  dropdownToggleBtnOpen: {
+    backgroundColor: "#F8FAFC",
+    borderColor: "#E2E8F0",
+  },
+  dropdownToggleText: {
+    fontSize: 11.5,
+    fontWeight: "700",
+    color: "#0284C7",
   },
   modalFieldLabel: {
     fontSize: 11,

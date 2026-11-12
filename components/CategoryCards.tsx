@@ -154,7 +154,7 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
 
   const handleBookConsultationPress = () => {
     router.push({
-      pathname: "/(app)/dashboard/consultation",
+      pathname: "/(app)/consultation",
       params: { category: categoryTitle },
     } as any);
   };
@@ -171,7 +171,7 @@ export const CategoryCards: React.FC<CategoryCardsProps> = ({
     setSelectedPlanTitle(planName);
     setShowTreatmentModal(false);
     router.push({
-      pathname: "/(app)/dashboard/consultation",
+      pathname: "/(app)/consultation",
       params: { plan: planName, category: categoryTitle },
     } as any);
   };

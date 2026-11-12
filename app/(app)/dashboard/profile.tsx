@@ -262,7 +262,14 @@ export default function ProfileScreen() {
           {/* Book Consultation */}
           <TouchableOpacity
             style={styles.menuRow}
-            onPress={() => router.push("/(app)/dashboard/consultation")}
+            onPress={() => {
+              router.push({
+                pathname: "/(app)/consultation",
+                params: {
+                  category: primaryGoal || "General Consultation",
+                },
+              } as any);
+            }}
             activeOpacity={0.7}
           >
             <View style={styles.menuIconBg}>

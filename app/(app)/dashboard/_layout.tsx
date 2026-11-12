@@ -37,7 +37,15 @@ export default function DashboardLayout() {
   // Guard: If user chose a non-weight goal, they should ONLY see their goal page & profile section!
   useEffect(() => {
     if (currentGoal && !isWeightLossGoal(currentGoal)) {
-      if (!pathname.includes("/profile")) {
+      const isProfile = pathname.includes("/profile");
+      const isConsultation = pathname.includes("/consultation");
+      const isDashboardTab =
+        pathname === "/(app)/dashboard" ||
+        pathname === "/(app)/dashboard/" ||
+        pathname === "/(app)" ||
+        (pathname.includes("/dashboard/") && !isProfile && !isConsultation);
+
+      if (isDashboardTab) {
         router.replace(getRouteForPrimaryGoal(currentGoal) as any);
       }
     }

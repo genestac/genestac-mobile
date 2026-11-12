@@ -147,6 +147,7 @@ export default function AppLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="dashboard" />
+        <Stack.Screen name="consultation" />
         <Stack.Screen name="longevity" />
         <Stack.Screen name="pain-regeneration" />
         <Stack.Screen name="hair-treatment" />

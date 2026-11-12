@@ -28,6 +28,9 @@ import {
   LaserTreatmentType,
   SkincareStep,
   FitzpatrickSkinData,
+  getHealingTimelineForLaser,
+  getChecklistForLaser,
+  getLaserProtocolMeta,
 } from "@/lib/skinLaser";
 
 import { PostLaserHealingCard } from "@/components/skinLaser/PostLaserHealingCard";
@@ -74,50 +77,66 @@ export default function SkinLaserTreatmentScreen() {
     init();
   }, []);
 
-  // Update & persist helper
-  const updateProfile = (nextProfile: SkinLaserProfile) => {
-    setProfile(nextProfile);
-    saveSkinLaserProfile(nextProfile);
+  // Update & persist helper with functional updater support
+  const updateProfile = (
+    updater: SkinLaserProfile | ((prev: SkinLaserProfile) => SkinLaserProfile)
+  ) => {
+    setProfile((prev) => {
+      const nextProfile = typeof updater === "function" ? updater(prev) : updater;
+      saveSkinLaserProfile(nextProfile);
+      return nextProfile;
+    });
   };
 
   // 1. LASER HEALING TIMELINE HANDLERS
   const handleUpdateSession = (updated: Partial<LaserSession>) => {
-    const updatedSession = {
-      ...profile.laserSession,
-      ...updated,
-    };
-    updateProfile({
-      ...profile,
-      laserSession: updatedSession,
-    });
+    updateProfile((prev) => ({
+      ...prev,
+      laserSession: {
+        ...prev.laserSession,
+        ...updated,
+      },
+      lastUpdatedDate: new Date().toISOString(),
+    }));
   };
 
   const handleResetSession = (
     laserType: LaserTreatmentType,
-    sessionDate: string
+    sessionDate?: string,
+    notes?: string
   ) => {
+    const meta = getLaserProtocolMeta(laserType);
+    const date = sessionDate || new Date().toISOString();
+    const finalNotes =
+      notes && notes.trim().length > 0
+        ? notes.trim()
+        : `Started new ${laserType} recovery protocol on ${new Date().toLocaleDateString()}. ${meta.defaultNote}`;
+
     const newSession: LaserSession = {
       isActive: true,
       laserType,
-      sessionDate,
+      sessionDate: date,
       currentDay: 1,
       comfortLevel: 3,
-      notes: `Started new ${laserType} recovery protocol on ${new Date().toLocaleDateString()}.`,
+      notes: finalNotes,
     };
-    updateProfile({
-      ...profile,
+
+    updateProfile((prev) => ({
+      ...prev,
       laserSession: newSession,
-    });
+      checklists: getChecklistForLaser(laserType),
+      lastUpdatedDate: new Date().toISOString(),
+    }));
   };
 
   const handleToggleChecklist = (id: string) => {
-    const updatedChecklists = profile.checklists.map((c) =>
-      c.id === id ? { ...c, completed: !c.completed } : c
-    );
-    updateProfile({
-      ...profile,
-      checklists: updatedChecklists,
-    });
+    updateProfile((prev) => ({
+      ...prev,
+      checklists: prev.checklists.map((c) =>
+        c.id === id ? { ...c, completed: !c.completed } : c
+      ),
+      lastUpdatedDate: new Date().toISOString(),
+    }));
   };
 
   // 2. AM / PM SKINCARE ROUTINE HANDLERS
@@ -204,14 +223,11 @@ export default function SkinLaserTreatmentScreen() {
   };
 
   // Quick Overview Stats
-  const healingStageName =
-    profile.laserSession.currentDay === 1
-      ? "Day 1 (Redness)"
-      : profile.laserSession.currentDay === 3
-      ? "Day 3 (Peeling)"
-      : profile.laserSession.currentDay === 7
-      ? "Day 7 (Glowing)"
-      : `Day ${profile.laserSession.currentDay}`;
+  const currentTimeline = getHealingTimelineForLaser(profile.laserSession.laserType);
+  const currentDayData = currentTimeline.find((d) => d.day === profile.laserSession.currentDay);
+  const healingStageName = currentDayData?.shortLabel
+    ? `Day ${profile.laserSession.currentDay} (${currentDayData.shortLabel})`
+    : `Day ${profile.laserSession.currentDay}`;
 
   const amDoneCount = profile.routine.amSteps.filter((s) => s.completed).length;
   const amTotalCount = profile.routine.amSteps.length;
@@ -278,7 +294,7 @@ export default function SkinLaserTreatmentScreen() {
                 activeTab === "all" && styles.tabChipTextActive,
               ]}
             >
-              Overview
+              Procedure
             </Text>
           </TouchableOpacity>
 
